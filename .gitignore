@@ -1,0 +1,62 @@
+# .gitignore for rag-chatbot-frontend/
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# If you were to use any build tools (like Vite, Webpack, etc. to compile JS/CSS)
+# you would add their output directories here, e.g.:
+# /dist
+# /build
+
+# If you were to use any Node.js for frontend build processes:
+# /node_modules
+# npm-debug.log*
+# yarn-debug.log*
+# .env # If your frontend used .env for non-sensitive public variables
+# .gitignore for rag-chatbot-backend/
+
+# Node.js dependencies
+/node_modules
+
+# Environment variables
+.env
+.env.*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# npm debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# build outputs (if you were to compile TypeScript or bundle for deployment)
+/dist
+/build
+/out
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# Any data files that should not be committed (ee.g., if you were to store
+# PDFs locally and not want them in Git, or if ChromaDB was local)
+# For this project, as we're using Supabase, no local DB files are created.
+# If you use the PDFLoader and store PDFs in a 'data' folder locally,
+# and you DON'T want those PDFs committed to Git (e.g., if they are very large
+# or sensitive), you would add:
+# /data/*.pdf
+# /data/*.txt
+# /data/
+
+# Log files
+*.log
+logs/
+
+# Test reports
+/coverage
+
+*.json

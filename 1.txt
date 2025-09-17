@@ -1,0 +1,3535 @@
+is it possible to make a rag chatbot by using a gemini Api key and chromadb without compromising its knowledge and such that the chroma db will be an addition to the chatbot. the api key will not only be a llm but also will be as it would've acted if called normally by its model. normally in a rag chatbot what happens is that the chatbot becomes empty and when the user inputs data through a vector db then it answers solely based on that data, i don't want that . i want it to have all the data it had  plus user uploaded data as context.
+
+AI: Yes, absolutely! What you're describing is not only possible but is the *standard and recommended way* to implement RAG (Retrieval Augmented Generation) with powerful LLMs like Gemini.
+
+You are correct that some basic RAG examples might give the impression that the LLM "forgets" everything and *only* relies on the provided context. However, this is a misunderstanding or a limitation of the *prompt engineering* in those specific examples, not an inherent limitation of RAG or the LLM itself.
+
+Here's how you can achieve your goal:
+
+### The Core Idea: Prompt Engineering
+
+The LLM (Gemini in your case) doesn't lose its inherent knowledge. When you use RAG, you are simply *prepending* or *inserting* additional, highly relevant information (retrieved from ChromaDB) into the prompt that you send to Gemini. Gemini then processes this augmented prompt, using both the provided context and its vast internal pre-trained knowledge base to formulate a response.
+
+### How it Works Step-by-Step:
+
+1.  **User Query:** The user asks a question (e.g., "What is the capital of France, and what were the key features of project 'Alpha' from our internal documents?").
+
+2.  **Embed User Query:** Your application takes the user's question and uses an embedding model (Gemini can act as one, or you can use a specialized embedding model) to convert it into a vector.
+
+3.  **Retrieve from ChromaDB:** This query vector is then used to search ChromaDB. ChromaDB returns the most semantically similar documents (or chunks of documents) from your custom knowledge base (e.g., details about project 'Alpha').
+
+4.  **Construct the Augmented Prompt (The Crucial Part!):** This is where you combine everything. You craft a prompt that:
+    *   **Instructs the LLM:** Tells Gemini its role, what to do, and how to prioritize information.
+    *   **Injects Retrieved Context:** Includes the relevant documents retrieved from ChromaDB.
+    *   **Includes Original User Query:** Puts the user's actual question at the end.
+
+    **Example Prompt Template:**
+
+    ```
+    You are a helpful AI assistant.
+    Below is some context that might be relevant to the user's question.
+    --------------------
+    Context:
+    {retrieved_documents_from_chromadb_here}
+    --------------------
+    Please answer the following question.
+    If the provided context contains a direct and clear answer, prioritize that information.
+    If the context is insufficient, irrelevant, or if the question requires general knowledge not present in the context, use your vast general knowledge base to provide a comprehensive answer.
+    Be concise, accurate, and helpful.
+
+    User Question: {original_user_query_here}
+    ```
+
+5.  **Call Gemini API:** Your application sends this entire augmented prompt to the Gemini API.
+
+6.  **Gemini Processes and Responds:** Gemini receives this prompt. It reads the instructions, the provided context, and the user's question. It then leverages:
+    *   **The specific context you provided** (e.g., details about Project Alpha).
+    *   **Its vast internal knowledge** (e.g., that Paris is the capital of France).
+    *   **Its reasoning capabilities** to synthesize this information and generate a coherent answer.
+
+### Why this addresses your concerns:
+
+*   **Gemini Retains Knowledge:** Gemini's pre-trained weights (its "knowledge") are always active. It doesn't "become empty." The RAG process merely adds *more information* to its current "thought process" for a specific query.
+*   **ChromaDB is an Addition:** Your ChromaDB data acts as supplementary, domain-specific, or up-to-date knowledge that Gemini might not have or that you want it to prioritize for specific queries.
+*   **LLM Acts Normally:** If a user asks "What is the capital of France?" and your ChromaDB has no relevant documents, Gemini will still answer correctly because the prompt encourages it to use its general knowledge when context is lacking. If the user asks about a very specific internal project, and ChromaDB provides the answer, Gemini will use that. If a question requires both (like your example), Gemini will combine both sources.
+
+### Key Components:
+
+1.  **Gemini API Key:**
+    *   **As the LLM:** For generating responses based on the augmented prompt.
+    *   **As an Embedding Model (Optional but common):** To convert your documents into vectors for ChromaDB, and to convert user queries into vectors for retrieval. You can also use other dedicated embedding models.
+2.  **ChromaDB:** Your vector database to store and retrieve your custom, supplementary data.
+3.  **Your Orchestration Code (e.g., Python):** This is the glue that handles:
+    *   Taking user input.
+    *   Calling the embedding model.
+    *   Querying ChromaDB.
+    *   Constructing the prompt.
+    *   Calling the Gemini LLM.
+    *   Presenting the final answer.
+
+This approach gives you the best of both worlds: the power and general knowledge of a cutting-edge LLM like Gemini, augmented with your specific, controlled, and up-to-date information.
+
+---------------------------------------------
+
+I'm sharing with you an HTML chat bot code I want you to turn it into a rack chat bot which way take input from the user and fetch the data as context into chroma TV and will also have it's own knowledge for analysing and answering the whole context can you do that for reference HTML code
+
+---------------------------------------------------
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Small AI v2</title>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <!-- Favicon -->
+    <link rel="icon" href="logo.png" type="image/x-icon">
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Marked.js CDN for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Lucide Icons for a modern, futuristic feel -->
+    <script src="https://cdn.jsdelivr.net/npm/lucide-dynamic@latest/dist/lucide.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /*
+         * --- Custom Styles for AI Chat Assistant (Enhanced) ---
+         * This section enhances the Tailwind CSS with a modern, futuristic theme,
+         * including a vibrant color palette, subtle animations, and improved
+         * responsiveness and UI elements, specifically for a chat-only interface.
+         */
+        
+        /* Base font and transition settings for the whole page */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent body scroll if content overflows, let individual sections scroll */
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.6s ease, color 0.6s ease;
+            display: flex; /* Main flex container for sidebar and chat window */
+            color: var(--text-primary); /* Use theme variables */
+        }
+
+        /* --- Theme Definitions --- */
+        /*
+         * Each theme has a dark and light variant defined by `body[data-theme="theme-name-mode"]`.
+         * This allows for unique color palettes and background designs for each theme and its mode.
+         */
+
+        /* Default Theme: Light Mode */
+        body[data-theme="default-light"] {
+            --bg-primary: #f3f4f6;
+            --bg-secondary: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #4b5563;
+            --border-color: #e5e7eb;
+            --card-bg: #ffffff;
+            --card-border: #e5e7eb;
+            --header-bg: #f9fafb;
+            --accent-primary: #6366f1;
+            --accent-primary-hover: #4f46e5;
+            --accent-secondary: #22d3ee;
+            --accent-error: #ef4444;
+            --accent-success: #22c55e;
+            --user-bubble-bg: #e0f2fe;
+            --user-bubble-text: #1e40af;
+            --ai-bubble-bg: #f3f4f6;
+            --ai-bubble-text: #374151;
+            --sidebar-bg: #ffffff;
+            --sidebar-border: #e5e7eb;
+            --sidebar-item-hover: #f3f4f6;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8); /* Slightly transparent */
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #1f2937;
+            --conversation-indicator: #6366f1;
+
+
+            background-image: radial-gradient(at 0% 0%, hsl(210, 30%, 95%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(200, 20%, 90%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Default Theme: Dark Mode */
+        body[data-theme="default-dark"] {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #13131a;
+            --text-primary: #e5e7eb;
+            --text-secondary: #a1a1aa;
+            --border-color: #2d3748;
+            --card-bg: #13131a;
+            --card-border: #2d3748;
+            --header-bg: #1f2937;
+            --accent-primary: #818cf8;
+            --accent-primary-hover: #6366f1;
+            --accent-secondary: #67e8f9;
+            --accent-error: #f87171;
+            --accent-success: #4ade80;
+            --user-bubble-bg: #1a237e;
+            --user-bubble-text: #e0e7ff;
+            --ai-bubble-bg: #2d3748;
+            --ai-bubble-text: #f9fafb;
+            --sidebar-bg: #13131a;
+            --sidebar-border: #2d3748;
+            --sidebar-item-hover: #1f2937;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(19, 19, 26, 0.9); /* Slightly transparent */
+            --conversation-bg: rgba(19, 19, 26, 0.95);
+            --conversation-text: #e5e7eb;
+            --conversation-indicator: #818cf8;
+
+            background-image: radial-gradient(at 0% 0%, hsl(240, 60%, 8%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(260, 50%, 8%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Celestial Horizon Theme: Dark Mode */
+        body[data-theme="celestial-horizon-dark"] {
+            --bg-primary: #0D1117;
+            --bg-secondary: #161B22;
+            --text-primary: #C9D1D9;
+            --text-secondary: #8B949E;
+            --border-color: #30363D;
+            --card-bg: #1F2633;
+            --card-border: #30363D;
+            --header-bg: #161B22;
+            --accent-primary: #58A6FF;
+            --accent-primary-hover: #388BF2;
+            --accent-secondary: #B1B8C1;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #253B64;
+            --user-bubble-text: #E0F2FE;
+            --ai-bubble-bg: #1F2633;
+            --ai-bubble-text: #C9D1D9;
+            --sidebar-bg: #161B22;
+            --sidebar-border: #30363D;
+            --sidebar-item-hover: #1F2633;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(22, 27, 34, 0.9);
+            --conversation-bg: rgba(22, 27, 34, 0.95);
+            --conversation-text: #C9D1D9;
+            --conversation-indicator: #58A6FF;
+
+            background-image: radial-gradient(at 0% 0%, hsl(220, 40%, 10%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(260, 40%, 10%) 0%, transparent 50%),
+                              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><filter id="f1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="0.3" /></filter></defs><rect width="100" height="100" fill="%230D1117" /><g filter="url(%23f1)" opacity="0.6"><circle cx="10" cy="15" r="0.2" fill="%23c9d1d9" /><circle cx="30" cy="5" r="0.3" fill="%2358A6FF" /><circle cx="50" cy="20" r="0.25" fill="%23c9d1d9" /><circle cx="70" cy="10" r="0.35" fill="%2358A6FF" /><circle cx="90" cy="25" r="0.3" fill="%23c9d1d9" /><circle cx="20" cy="40" r="0.3" fill="%2358A6FF" /><circle cx="45" cy="35" r="0.2" fill="%23c9d1d9" /><circle cx="65" cy="50" r="0.35" fill="%2358A6FF" /><circle cx="85" cy="40" r="0.25" fill="%23c9d1d9" /><circle cx="5" cy="60" r="0.35" fill="%2358A6FF" /><circle cx="25" cy="70" r="0.25" fill="%23c9d1d9" /><circle cx="40" cy="85" r="0.3" fill="%2358A6FF" /><circle cx="60" cy="75" r="0.2" fill="%23c9d1d9" /><circle cx="80" cy="90" r="0.35" fill="%2358A6FF" /><circle cx="95" cy="65" r="0.3" fill="%23c9d1d9" /></g></svg>');
+            background-size: cover, cover, cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Celestial Horizon Theme: Light Mode */
+        body[data-theme="celestial-horizon-light"] {
+            --bg-primary: #F0F4F8;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #2D3748;
+            --text-secondary: #718096;
+            --border-color: #E2E8F0;
+            --card-bg: #FFFFFF;
+            --card-border: #E2E8F0;
+            --header-bg: #EDF2F7;
+            --accent-primary: #3B82F6;
+            --accent-primary-hover: #2563EB;
+            --accent-secondary: #60A5FA;
+            --accent-error: #EF4444;
+            --accent-success: #22C55E;
+            --user-bubble-bg: #DBEAFE;
+            --user-bubble-text: #1E40AF;
+            --ai-bubble-bg: #EBF4FF;
+            --ai-bubble-text: #2D3748;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #E2E8F0;
+            --sidebar-item-hover: #F0F4F8;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #2D3748;
+            --conversation-indicator: #3B82F6;
+
+            background-image: radial-gradient(at 0% 0%, hsl(200, 50%, 98%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(240, 50%, 95%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Verdant Calm Theme: Dark Mode (Renamed from Forest Whisper) */
+        body[data-theme="verdant-calm-dark"] {
+            --bg-primary: #1a2a22;
+            --bg-secondary: #21362d;
+            --text-primary: #e0f2e8;
+            --text-secondary: #99bbaa;
+            --border-color: #3f544c;
+            --card-bg: #294237;
+            --card-border: #4a6356;
+            --header-bg: #2c493c;
+            --accent-primary: #3cb878;
+            --accent-primary-hover: #2fa163;
+            --accent-secondary: #60c58e;
+            --accent-error: #f87171;
+            --accent-success: #4ade80;
+            --user-bubble-bg: #1e8449;
+            --user-bubble-text: #e0f2e8;
+            --ai-bubble-bg: #34495e;
+            --ai-bubble-text: #e0f2e8;
+            --sidebar-bg: #21362d;
+            --sidebar-border: #3f544c;
+            --sidebar-item-hover: #2c493c;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(33, 54, 45, 0.9);
+            --conversation-bg: rgba(33, 54, 45, 0.95);
+            --conversation-text: #e0f2e8;
+            --conversation-indicator: #3cb878;
+
+            background-image: radial-gradient(at 0% 0%, hsl(150, 20%, 15%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(120, 20%, 12%) 0%, transparent 50%),
+                              linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)),
+                              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><filter id="f2" x="-50%" y="-50%" width="200%" height="200%"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" result="noise" /><feDiffuseLighting in="noise" lightingColor="%234A6356" surfaceScale="5" result="light"><feDistantLight azimuth="235" elevation="60" /></feDiffuseLighting><feComposite in="SourceGraphic" in2="light" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" /></filter></defs><rect width="100" height="100" fill="%231a2a22" filter="url(%23f2)" /></svg>');
+            background-size: cover, cover, cover, cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Verdant Calm Theme: Light Mode */
+        body[data-theme="verdant-calm-light"] {
+            --bg-primary: #edf9f5;
+            --bg-secondary: #ffffff;
+            --text-primary: #2d3f35;
+            --text-secondary: #5e7d6b;
+            --border-color: #dbeae5;
+            --card-bg: #ffffff;
+            --card-border: #dbeae5;
+            --header-bg: #f5fcf9;
+            --accent-primary: #3cb878;
+            --accent-primary-hover: #2fa163;
+            --accent-secondary: #60c58e;
+            --accent-error: #ef4444;
+            --accent-success: #22c55e;
+            --user-bubble-bg: #c8e6c9;
+            --user-bubble-text: #1b5e20;
+            --ai-bubble-bg: #e8f5e9;
+            --ai-bubble-text: #388e3c;
+            --sidebar-bg: #ffffff;
+            --sidebar-border: #dbeae5;
+            --sidebar-item-hover: #edf9f5;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #2d3f35;
+            --conversation-indicator: #3cb878;
+
+            background-image: radial-gradient(at 0% 0%, hsl(140, 20%, 98%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(100, 15%, 95%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Cybernetic Pulse Theme: Dark Mode */
+        body[data-theme="cybernetic-pulse-dark"] {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #161c28;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --border-color: #2f3e52;
+            --card-bg: #1f2a3a;
+            --card-border: #3a4b5e;
+            --header-bg: #1f2a3a;
+            --accent-primary: #0ea5e9;
+            --accent-primary-hover: #0284c7;
+            --accent-secondary: #38bdf8;
+            --accent-error: #f87171;
+            --accent-success: #4ade80;
+            --user-bubble-bg: #0c4a6e;
+            --user-bubble-text: #e0f2fe;
+            --ai-bubble-bg: #2d3748;
+            --ai-bubble-text: #f0f8ff;
+            --sidebar-bg: #161c28;
+            --sidebar-border: #2f3e52;
+            --sidebar-item-hover: #1f2a3a;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(22, 28, 40, 0.9);
+            --conversation-bg: rgba(22, 28, 40, 0.95);
+            --conversation-text: #e2e8f0;
+            --conversation-indicator: #0ea5e9;
+
+            background-image: radial-gradient(at 0% 0%, hsl(210, 50%, 8%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(230, 40%, 8%) 0%, transparent 50%),
+                              linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
+                              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="circuit" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 L 0 10" fill="none" stroke="%232f3e52" stroke-width="0.3" /></pattern></defs><rect width="100" height="100" fill="url(%23circuit)" /></svg>');
+            background-size: cover, cover, cover, auto;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Cybernetic Pulse Theme: Light Mode */
+        body[data-theme="cybernetic-pulse-light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --border-color: #e0e7f2;
+            --card-bg: #ffffff;
+            --card-border: #e0e7f2;
+            --header-bg: #f1f5f9;
+            --accent-primary: #0ea5e9;
+            --accent-primary-hover: #0284c7;
+            --accent-secondary: #38bdf8;
+            --accent-error: #ef4444;
+            --accent-success: #22c55e;
+            --user-bubble-bg: #bfdbfe;
+            --user-bubble-text: #1e3a8a;
+            --ai-bubble-bg: #e0f2fe;
+            --ai-bubble-text: #0284c7;
+            --sidebar-bg: #ffffff;
+            --sidebar-border: #e0e7f2;
+            --sidebar-item-hover: #f1f5f9;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #1e293b;
+            --conversation-indicator: #0ea5e9;
+
+            background-image: radial-gradient(at 0% 0%, hsl(200, 30%, 98%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(220, 20%, 95%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Urban Pulse Theme: Dark Mode */
+        body[data-theme="urban-pulse-dark"] {
+            --bg-primary: #1A1A1D;
+            --bg-secondary: #242426;
+            --text-primary: #F0F0F0;
+            --text-secondary: #A0A0A0;
+            --border-color: #38383B;
+            --card-bg: #242426;
+            --card-border: #38383B;
+            --header-bg: #1A1A1D;
+            --accent-primary: #00BFFF; /* Deep Sky Blue */
+            --accent-primary-hover: #009ACD;
+            --accent-secondary: #66CCFF;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #0F4C81;
+            --user-bubble-text: #E0FFFF;
+            --ai-bubble-bg: #36454F;
+            --ai-bubble-text: #F0F0F0;
+            --sidebar-bg: #1A1A1D;
+            --sidebar-border: #38383B;
+            --sidebar-item-hover: #242426;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(36, 36, 38, 0.9);
+            --conversation-bg: rgba(36, 36, 38, 0.95);
+            --conversation-text: #F0F0F0;
+            --conversation-indicator: #00BFFF;
+
+            background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 L 0 10" fill="none" stroke="%23303030" stroke-width="0.3" /></pattern></defs><rect width="100" height="100" fill="url(%23grid)" /></svg>');
+            background-size: cover, auto;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Urban Pulse Theme: Light Mode */
+        body[data-theme="urban-pulse-light"] {
+            --bg-primary: #F2F4F8;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #333333;
+            --text-secondary: #777777;
+            --border-color: #DDE2E8;
+            --card-bg: #FFFFFF;
+            --card-border: #DDE2E8;
+            --header-bg: #E8ECF2;
+            --accent-primary: #1E90FF; /* Dodger Blue */
+            --accent-primary-hover: #107EEB;
+            --accent-secondary: #63B2FF;
+            --accent-error: #EF4444;
+            --accent-success: #22C55E;
+            --user-bubble-bg: #CCE5FF;
+            --user-bubble-text: #003F8C;
+            --ai-bubble-bg: #E8F0F5;
+            --ai-bubble-text: #333333;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #DDE2E8;
+            --sidebar-item-hover: #E8F0F5;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #333333;
+            --conversation-indicator: #1E90FF;
+
+            background-image: radial-gradient(at 0% 0%, hsl(210, 30%, 98%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(200, 20%, 95%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Rustic Ember Theme: Dark Mode */
+        body[data-theme="rustic-ember-dark"] {
+            --bg-primary: #3E2723;
+            --bg-secondary: #4E342E;
+            --text-primary: #FBE9E7;
+            --text-secondary: #BCAAA4;
+            --border-color: #5D4037;
+            --card-bg: #4E342E;
+            --card-border: #5D4037;
+            --header-bg: #3E2723;
+            --accent-primary: #D84315;
+            --accent-primary-hover: #BF360C;
+            --accent-secondary: #FF8A65;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #8D6E63;
+            --user-bubble-text: #FBE9E7;
+            --ai-bubble-bg: #5D4037;
+            --ai-bubble-text: #FBE9E7;
+            --sidebar-bg: #3E2723;
+            --sidebar-border: #5D4037;
+            --sidebar-item-hover: #4E342E;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(78, 52, 46, 0.9);
+            --conversation-bg: rgba(78, 52, 46, 0.95);
+            --conversation-text: #FBE9E7;
+            --conversation-indicator: #D84315;
+
+            background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><filter id="woodgrain" x="-50%" y="-50%" width="200%" height="200%"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="4" stitchTiles="stitch" result="texture"/><feColorMatrix type="saturate" values="0.2"/><feComponentTransfer><feFuncR type="linear" slope="0.5" intercept="0.2"/><feFuncG type="linear" slope="0.5" intercept="0.1"/><feFuncB type="linear" slope="0.5" intercept="0"/></feComponentTransfer></filter></defs><rect width="100" height="100" fill="%233E2723" filter="url(%23woodgrain)"/></svg>');
+            background-size: cover, cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Rustic Ember Theme: Light Mode */
+        body[data-theme="rustic-ember-light"] {
+            --bg-primary: #F5E8DC;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #4E342E;
+            --text-secondary: #8D6E63;
+            --border-color: #E6DCCD;
+            --card-bg: #FFFFFF;
+            --card-border: #E6DCCD;
+            --header-bg: #F8EFE5;
+            --accent-primary: #E65100;
+            --accent-primary-hover: #D84315;
+            --accent-secondary: #FFB74D;
+            --accent-error: #EF4444;
+            --accent-success: #22C55E;
+            --user-bubble-bg: #FFCCBC;
+            --user-bubble-text: #BF360C;
+            --ai-bubble-bg: #FBE9E7;
+            --ai-bubble-text: #4E342E;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #E6DCCD;
+            --sidebar-item-hover: #F8EFE5;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #4E342E;
+            --conversation-indicator: #E65100;
+
+            background-image: radial-gradient(at 0% 0%, hsl(30, 40%, 98%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(15, 30%, 95%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Neon Mirage Theme: Dark Mode */
+        body[data-theme="neon-mirage-dark"] {
+            --bg-primary: #05001C;
+            --bg-secondary: #120033;
+            --text-primary: #E0FFFF;
+            --text-secondary: #8A2BE2;
+            --border-color: #2F004F;
+            --card-bg: #1A0040;
+            --card-border: #2F004F;
+            --header-bg: #120033;
+            --accent-primary: #FF1493;
+            --accent-primary-hover: #C7007C;
+            --accent-secondary: #00BFFF;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #4B0082;
+            --user-bubble-text: #E0FFFF;
+            --ai-bubble-bg: #2E0854;
+            --ai-bubble-text: #E0FFFF;
+            --sidebar-bg: #120033;
+            --sidebar-border: #2F004F;
+            --sidebar-item-hover: #1A0040;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(26, 0, 64, 0.9);
+            --conversation-bg: rgba(26, 0, 64, 0.95);
+            --conversation-text: #E0FFFF;
+            --conversation-indicator: #FF1493;
+
+            background-image: radial-gradient(at 0% 0%, hsl(300, 80%, 15%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(240, 80%, 15%) 0%, transparent 50%),
+                              linear-gradient(to top right, rgba(255, 20, 147, 0.1), transparent),
+                              linear-gradient(to bottom left, rgba(0, 191, 255, 0.1), transparent);
+            background-size: cover, cover, cover, cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Neon Mirage Theme: Light Mode */
+        body[data-theme="neon-mirage-light"] {
+            --bg-primary: #F8F0FF;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #330066;
+            --text-secondary: #663399;
+            --border-color: #EBD9FC;
+            --card-bg: #FFFFFF;
+            --card-border: #EBD9FC;
+            --header-bg: #F2E0FF;
+            --accent-primary: #FF69B4;
+            --accent-primary-hover: #E0509B;
+            --accent-secondary: #87CEEB;
+            --accent-error: #EF4444;
+            --accent-success: #22C55E;
+            --user-bubble-bg: #FCE4EC;
+            --user-bubble-text: #C2185B;
+            --ai-bubble-bg: #F3E5F5;
+            --ai-bubble-text: #330066;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #EBD9FC;
+            --sidebar-item-hover: #F2E0FF;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #330066;
+            --conversation-indicator: #FF69B4;
+
+            background-image: radial-gradient(at 0% 0%, hsl(330, 80%, 98%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(270, 80%, 95%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Ivory Bloom Theme: Dark Mode */
+        body[data-theme="ivory-bloom-dark"] {
+            --bg-primary: #2B2D42;
+            --bg-secondary: #4A4E69;
+            --text-primary: #DCDCDC;
+            --text-secondary: #A0A4B8;
+            --border-color: #5D607E;
+            --card-bg: #4A4E69;
+            --card-border: #5D607E;
+            --header-bg: #373A50;
+            --accent-primary: #9B59B6;
+            --accent-primary-hover: #8E44AD;
+            --accent-secondary: #66CCFF;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #7C4F9B;
+            --user-bubble-text: #FFFFFF;
+            --ai-bubble-bg: #5D607E;
+            --ai-bubble-text: #DCDCDC;
+            --sidebar-bg: #2B2D42;
+            --sidebar-border: #5D607E;
+            --sidebar-item-hover: #373A50;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(74, 78, 105, 0.9);
+            --conversation-bg: rgba(74, 78, 105, 0.95);
+            --conversation-text: #DCDCDC;
+            --conversation-indicator: #9B59B6;
+
+            background-image: radial-gradient(at 0% 0%, hsl(240, 20%, 20%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(200, 20%, 18%) 0%, transparent 50%),
+                              linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
+                              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="petal" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M5 0 L6 4 L10 5 L6 6 L5 10 L4 6 L0 5 L4 4 Z" fill="%234A4E69" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23petal)"/></svg>');
+            background-size: cover, cover, cover, auto;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Ivory Bloom Theme: Light Mode */
+        body[data-theme="ivory-bloom-light"] {
+            --bg-primary: #FDFDFD;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #333333;
+            --text-secondary: #777777;
+            --border-color: #EAEAEA;
+            --card-bg: #FFFFFF;
+            --card-border: #EAEAEA;
+            --header-bg: #F5F5F5;
+            --accent-primary: #8E44AD;
+            --accent-primary-hover: #7F3C9E;
+            --accent-secondary: #BA68C8;
+            --accent-error: #EF4444;
+            --accent-success: #22C55E;
+            --user-bubble-bg: #F2E6F7;
+            --user-bubble-text: #5D2C7B;
+            --ai-bubble-bg: #EAE0F0;
+            --ai-bubble-text: #333333;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #EAEAEA;
+            --sidebar-item-hover: #F5F5F5;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #333333;
+            --conversation-indicator: #8E44AD;
+
+            background-image: radial-gradient(at 0% 0%, hsl(300, 10%, 99%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(280, 15%, 97%) 0%, transparent 50%),
+                              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="flower" width="15" height="15" patternUnits="userSpaceOnUse"><path d="M7.5 0 L9 4 L13 6 L9 8 L7.5 12 L6 8 L2 6 L6 4 Z" fill="%23EAEAEA" opacity="0.3"/></pattern></defs><rect width="100" height="100" fill="url(%23flower)"/></svg>');
+            background-size: cover, cover, auto;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Obsidian Night Theme: Dark Mode */
+        body[data-theme="obsidian-night-dark"] {
+            --bg-primary: #121212;
+            --bg-secondary: #1E1E1E;
+            --text-primary: #F0F0F0;
+            --text-secondary: #A0A0A0;
+            --border-color: #333333;
+            --card-bg: #1E1E1E;
+            --card-border: #333333;
+            --header-bg: #121212;
+            --accent-primary: #BB86FC;
+            --accent-primary-hover: #9E65E2;
+            --accent-secondary: #03DAC6;
+            --accent-error: #CF6679;
+            --accent-success: #03DAC6;
+            --user-bubble-bg: #3700B3;
+            --user-bubble-text: #FFFFFF;
+            --ai-bubble-bg: #2C2C2C;
+            --ai-bubble-text: #F0F0F0;
+            --sidebar-bg: #121212;
+            --sidebar-border: #333333;
+            --sidebar-item-hover: #1E1E1E;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(30, 30, 30, 0.9);
+            --conversation-bg: rgba(30, 30, 30, 0.95);
+            --conversation-text: #F0F0F0;
+            --conversation-indicator: #BB86FC;
+
+            background-image: radial-gradient(at 0% 0%, hsl(250, 10%, 10%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(200, 10%, 10%) 0%, transparent 50%),
+                              linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)),
+                              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="dark-hex" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 5 L5 0 L10 5 L5 10 Z" fill="none" stroke="%23333333" stroke-width="0.2"/></pattern></defs><rect width="100" height="100" fill="url(%23dark-hex)"/></svg>');
+            background-size: cover, cover, cover, auto;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Obsidian Night Theme: Light Mode */
+        body[data-theme="obsidian-night-light"] {
+            --bg-primary: #E0E0E0;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #2C2C2C;
+            --text-secondary: #6B6B6B;
+            --border-color: #C0C0C0;
+            --card-bg: #FFFFFF;
+            --card-border: #C0C0C0;
+            --header-bg: #D0D0D0;
+            --accent-primary: #6200EE;
+            --accent-primary-hover: #5B00D9;
+            --accent-secondary: #018786;
+            --accent-error: #B00020;
+            --accent-success: #018786;
+            --user-bubble-bg: #BBDEFB;
+            --user-bubble-text: #1A237E;
+            --ai-bubble-bg: #E0E0E0;
+            --ai-bubble-text: #2C2C2C;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #C0C0C0;
+            --sidebar-item-hover: #D0D0D0;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #2C2C2C;
+            --conversation-indicator: #6200EE;
+
+            background-image: radial-gradient(at 0% 0%, hsl(240, 10%, 95%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(200, 10%, 92%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Solar Dawn Theme: Dark Mode */
+        body[data-theme="solar-dawn-dark"] {
+            --bg-primary: #1A0E2A;
+            --bg-secondary: #2C1840;
+            --text-primary: #FCE8D8;
+            --text-secondary: #D8BFD8;
+            --border-color: #40265B;
+            --card-bg: #2C1840;
+            --card-border: #40265B;
+            --header-bg: #1A0E2A;
+            --accent-primary: #FF5722;
+            --accent-primary-hover: #E64A19;
+            --accent-secondary: #FFCC80;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #7C4F9B;
+            --user-bubble-text: #FCE8D8;
+            --ai-bubble-bg: #40265B;
+            --ai-bubble-text: #FCE8D8;
+            --sidebar-bg: #1A0E2A;
+            --sidebar-border: #40265B;
+            --sidebar-item-hover: #2C1840;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(44, 24, 64, 0.9);
+            --conversation-bg: rgba(44, 24, 64, 0.95);
+            --conversation-text: #FCE8D8;
+            --conversation-indicator: #FF5722;
+
+            background-image: linear-gradient(to top right, #3C096C, #6D2B7E, #FF5722);
+            background-size: cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Solar Dawn Theme: Light Mode */
+        body[data-theme="solar-dawn-light"] {
+            --bg-primary: #FFFBEA;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #3E2723;
+            --text-secondary: #8D6E63;
+            --border-color: #FFE0B2;
+            --card-bg: #FFFFFF;
+            --card-border: #FFE0B2;
+            --header-bg: #FFF3E0;
+            --accent-primary: #FF8F00;
+            --accent-primary-hover: #FF6F00;
+            --accent-secondary: #FFD54F;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #FFE0B2;
+            --user-bubble-text: #E65100;
+            --ai-bubble-bg: #FFF3E0;
+            --ai-bubble-text: #3E2723;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #FFE0B2;
+            --sidebar-item-hover: #FFF3E0;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #3E2723;
+            --conversation-indicator: #FF8F00;
+
+            background-image: linear-gradient(to top left, #FFD54F, #FFECB3, #FFFDE7);
+            background-size: cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Aurora Drift Theme: Dark Mode */
+        body[data-theme="aurora-drift-dark"] {
+            --bg-primary: #0A192F;
+            --bg-secondary: #172A45;
+            --text-primary: #E6F0FF;
+            --text-secondary: #A0B3D6;
+            --border-color: #2F476D;
+            --card-bg: #172A45;
+            --card-border: #2F476D;
+            --header-bg: #0A192F;
+            --accent-primary: #66CCCC;
+            --accent-primary-hover: #55B3B3;
+            --accent-secondary: #99CCFF;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #336699;
+            --user-bubble-text: #E6F0FF;
+            --ai-bubble-bg: #2F476D;
+            --ai-bubble-text: #E6F0FF;
+            --sidebar-bg: #0A192F;
+            --sidebar-border: #2F476D;
+            --sidebar-item-hover: #172A45;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(23, 42, 69, 0.9);
+            --conversation-bg: rgba(23, 42, 69, 0.95);
+            --conversation-text: #E6F0FF;
+            --conversation-indicator: #66CCCC;
+
+            background-image: linear-gradient(to top right, #0A192F, #172A45, #2F476D, #336699);
+            background-size: cover;
+            background-position: center center;
+            background-attachment: fixed;
+            animation: aurora-move 60s infinite alternate;
+        }
+
+        /* Aurora Drift Theme: Light Mode */
+        body[data-theme="aurora-drift-light"] {
+            --bg-primary: #E0F2F7;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #2B4550;
+            --text-secondary: #5E7A8A;
+            --border-color: #B2EBF2;
+            --card-bg: #FFFFFF;
+            --card-border: #B2EBF2;
+            --header-bg: #CCEEF0;
+            --accent-primary: #00BCD4;
+            --accent-primary-hover: #00ACC1;
+            --accent-secondary: #4DD0E1;
+            --accent-error: #EF4444;
+            --accent-success: #22C55E;
+            --user-bubble-bg: #B2EBF2;
+            --user-bubble-text: #006064;
+            --ai-bubble-bg: #CCEEF0;
+            --ai-bubble-text: #2B4550;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #B2EBF2;
+            --sidebar-item-hover: #CCEEF0;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #2B4550;
+            --conversation-indicator: #00BCD4;
+
+            background-image: linear-gradient(to bottom left, #E0F7FA, #B2EBF2, #80DEEA);
+            background-size: cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+        @keyframes aurora-move {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 100% 100%; }
+        }
+
+        /* Timeless Echo Theme: Dark Mode */
+        body[data-theme="timeless-echo-dark"] {
+            --bg-primary: #2C2C2C;
+            --bg-secondary: #3D3D3D;
+            --text-primary: #E0E0E0;
+            --text-secondary: #B0B0B0;
+            --border-color: #555555;
+            --card-bg: #3D3D3D;
+            --card-border: #555555;
+            --header-bg: #2C2C2C;
+            --accent-primary: #A57C52;
+            --accent-primary-hover: #8B653D;
+            --accent-secondary: #C8A87C;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #785A3D;
+            --user-bubble-text: #E0E0E0;
+            --ai-bubble-bg: #555555;
+            --ai-bubble-text: #E0E0E0;
+            --sidebar-bg: #2C2C2C;
+            --sidebar-border: #555555;
+            --sidebar-item-hover: #3D3D3D;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(61, 61, 61, 0.9);
+            --conversation-bg: rgba(61, 61, 61, 0.95);
+            --conversation-text: #E0E0E0;
+            --conversation-indicator: #A57C52;
+
+            background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><filter id="f3" x="-50%" y="-50%" width="200%" height="200%"><feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise" /><feColorMatrix type="saturate" values="0.3"/><feComponentTransfer><feFuncR type="linear" slope="0.8" intercept="0.1"/><feFuncG type="linear" slope="0.7" intercept="0.1"/><feFuncB type="linear" slope="0.6" intercept="0.1"/></feComponentTransfer></filter></defs><rect width="100" height="100" fill="%232C2C2C" filter="url(%23f3)" /></svg>');
+            background-size: cover, cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Timeless Echo Theme: Light Mode */
+        body[data-theme="timeless-echo-light"] {
+            --bg-primary: #FDF7E5;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #4A4A4A;
+            --text-secondary: #808080;
+            --border-color: #E6E0D3;
+            --card-bg: #FFFFFF;
+            --card-border: #E6E0D3;
+            --header-bg: #F5EFEB;
+            --accent-primary: #8D6E63;
+            --accent-primary-hover: #795548;
+            --accent-secondary: #BCAAA4;
+            --accent-error: #EF4444;
+            --accent-success: #22C55E;
+            --user-bubble-bg: #D7CCC8;
+            --user-bubble-text: #5D4037;
+            --ai-bubble-bg: #EFEBE9;
+            --ai-bubble-text: #4A4A4A;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #E6E0D3;
+            --sidebar-item-hover: #F5EFEB;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #4A4A4A;
+            --conversation-indicator: #8D6E63;
+
+            background-image: radial-gradient(at 0% 0%, hsl(40, 30%, 98%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(200, 20%, 95%) 0%, transparent 50%),
+                              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="vintage-pattern" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 0 0 L 10 10 M 10 0 L 0 10" stroke="%23E6E0D3" stroke-width="0.5" opacity="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23vintage-pattern)"/></svg>');
+            background-size: cover, cover, auto;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Mystic Void Theme: Dark Mode (Bonus Theme) */
+        body[data-theme="mystic-void-dark"] {
+            --bg-primary: #110B1D;
+            --bg-secondary: #1F1731;
+            --text-primary: #ECE4F7;
+            --text-secondary: #B29BCE;
+            --border-color: #372A4F;
+            --card-bg: #1F1731;
+            --card-border: #372A4F;
+            --header-bg: #110B1D;
+            --accent-primary: #9400D3;
+            --accent-primary-hover: #7B00B0;
+            --accent-secondary: #8A2BE2;
+            --accent-error: #F87171;
+            --accent-success: #4ADE80;
+            --user-bubble-bg: #5B2C7B;
+            --user-bubble-text: #ECE4F7;
+            --ai-bubble-bg: #372A4F;
+            --ai-bubble-text: #ECE4F7;
+            --sidebar-bg: #110B1D;
+            --sidebar-border: #372A4F;
+            --sidebar-item-hover: #1F1731;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(31, 23, 49, 0.9);
+            --conversation-bg: rgba(31, 23, 49, 0.95);
+            --conversation-text: #ECE4F7;
+            --conversation-indicator: #9400D3;
+
+            background-image: radial-gradient(at 0% 0%, hsl(270, 60%, 10%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(300, 50%, 10%) 0%, transparent 50%),
+                              linear-gradient(to top right, rgba(138, 43, 226, 0.1), transparent),
+                              linear-gradient(to bottom left, rgba(148, 0, 211, 0.1), transparent);
+            background-size: cover, cover, cover, cover;
+            background-position: center center;
+            background-attachment: fixed;
+        }
+
+        /* Mystic Void Theme: Light Mode */
+        body[data-theme="mystic-void-light"] {
+            --bg-primary: #F7EDFF;
+            --bg-secondary: #FFFFFF;
+            --text-primary: #330066;
+            --text-secondary: #663399;
+            --border-color: #EBD9FC;
+            --card-bg: #FFFFFF;
+            --card-border: #EBD9FC;
+            --header-bg: #F2E0FF;
+            --accent-primary: #8A2BE2;
+            --accent-primary-hover: #7B1FB2;
+            --accent-secondary: #9370DB;
+            --accent-error: #EF4444;
+            --accent-success: #22C55E;
+            --user-bubble-bg: #E6D2F2;
+            --user-bubble-text: #4B0082;
+            --ai-bubble-bg: #F0E6F8;
+            --ai-bubble-text: #330066;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #EBD9FC;
+            --sidebar-item-hover: #F2E0FF;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: rgba(255, 255, 255, 0.8);
+            --conversation-bg: rgba(255, 255, 255, 0.95);
+            --conversation-text: #330066;
+            --conversation-indicator: #8A2BE2;
+
+            background-image: radial-gradient(at 0% 0%, hsl(270, 30%, 98%) 0%, transparent 50%),
+                              radial-gradient(at 100% 100%, hsl(300, 20%, 95%) 0%, transparent 50%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        /* Darkest Black & White Theme: Dark Mode (Corrected Bubbles & Icons) */
+        body[data-theme="darkest-bw-dark"] {
+            --bg-primary: #000000; /* Pure black main body background */
+            --bg-secondary: #111111; /* Slightly off-black for card/secondary elements */
+            --text-primary: #FFFFFF; /* Pure white main text */
+            --text-secondary: #AAAAAA; /* Light gray for subtle text */
+            --border-color: #333333; /* Dark gray borders */
+            --card-bg: #111111;
+            --card-border: #333333;
+            --header-bg: #0A0A0A; /* Very dark gray for header */
+            --accent-primary: #E0E0E0; /* Bright light gray for primary accents (buttons, active states) */
+            --accent-primary-hover: #FFFFFF; /* Pure white for hover glow */
+            --accent-secondary: #888888; /* Mid-gray for secondary accents */
+            --accent-error: #F87171; /* Keep standard error color for usability */
+            --accent-success: #4ADE80; /* Keep standard success color for usability */
+            --user-bubble-bg: #222222; /* Dark gray for user chat bubbles */
+            --user-bubble-text: #FFFFFF; /* White text for user chat bubbles */
+            --ai-bubble-bg: #333333; /* Dark gray for AI chat bubbles */
+            --ai-bubble-text: #FFFFFF; /* White text for AI chat bubbles */
+            --sidebar-bg: #000000;
+            --sidebar-border: #333333;
+            --sidebar-item-hover: #111111;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: #000000; /* Solid off-black for chat window */
+            --conversation-bg: #000000; /* Solid pure black for conversation overlay */
+            --conversation-text: #FFFFFF;
+            --conversation-indicator: #FFFFFF;
+
+            background-image: none;
+            background-color: var(--bg-primary);
+        }
+
+        /* Darkest Black & White Theme: Light Mode (Revised) */
+        body[data-theme="darkest-bw-light"] {
+            --bg-primary: #FFFFFF; /* Pure white main body background */
+            --bg-secondary: #F0F0F0; /* Slightly off-white for card/secondary elements */
+            --text-primary: #000000; /* Pure black main text */
+            --text-secondary: #555555; /* Dark gray for subtle text */
+            --border-color: #DDDDDD; /* Light gray borders */
+            --card-bg: #F0F0F0;
+            --card-border: #DDDDDD;
+            --header-bg: #F5F5F5; /* Very light gray for header */
+            --accent-primary: #333333; /* Dark gray for primary accents (buttons, active states) */
+            --accent-primary-hover: #000000; /* Pure black for hover */
+            --accent-secondary: #777777; /* Mid-gray for secondary accents */
+            --accent-error: #EF4444; /* Keep standard error color for usability */
+            --accent-success: #22C55E; /* Keep standard success color for usability */
+            --user-bubble-bg: #EEEEEE; /* Very light gray for user chat bubbles */
+            --user-bubble-text: #000000;
+            --ai-bubble-bg: #DDDDDD; /* Slightly darker light gray for AI chat bubbles */
+            --ai-bubble-text: #000000;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-border: #DDDDDD;
+            --sidebar-item-hover: #F0F0F0;
+            --loader-dot-color: var(--accent-primary);
+            --main-chat-window-bg: #F0F0F0; /* Solid off-white for chat window */
+            --conversation-bg: #FFFFFF; /* Solid pure white for conversation overlay */
+            --conversation-text: #000000;
+            --conversation-indicator: #000000; /* Pure black indicator for conversation mode */
+
+            /* Removed all background-image properties for a solid background */
+            background-image: none;
+            background-color: var(--bg-primary); /* Explicitly set body background to primary color */
+        }
+
+        /* --- Global Styles & Overrides --- */
+
+        /* Apply theme colors */
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        /* Specific Tailwind overrides for consistency with theme variables */
+        .bg-white { background-color: var(--card-bg); }
+        .bg-gray-50 { background-color: var(--header-bg); }
+        .border-gray-100 { border-color: var(--card-border); }
+        .border-gray-200 { border-color: var(--card-border); }
+        .text-gray-800 { color: var(--text-primary); }
+        .text-gray-900 { color: var(--text-primary); }
+        .text-gray-600 { color: var(--text-secondary); }
+        .text-gray-700 { color: var(--text-secondary); }
+        .bg-gray-200 { background-color: var(--bg-primary); color: var(--text-primary); }
+        .hover\:bg-gray-300:hover { background-color: var(--sidebar-item-hover); }
+        .bg-gray-100 { background-color: var(--bg-primary); }
+        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+        body[data-theme$="-dark"] .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45); }
+        #error-message { background-color: var(--accent-error); color: white; } /* Light red for error, always visible */
+        body[data-theme$="-dark"] #error-message { background-color: var(--accent-error); color: white; }
+
+        /* Custom styles for glowing effects on buttons */
+        .glow-button {
+            position: relative;
+            z-index: 10;
+            transition: all 0.4s ease;
+            box-shadow: 0 0 10px var(--accent-primary);
+            background-color: var(--accent-primary); /* Ensure button uses accent primary directly */
+        }
+        .glow-button:hover {
+            box-shadow: 0 0 15px var(--accent-primary), 0 0 25px var(--accent-primary), 0 0 35px var(--accent-primary);
+            transform: translateY(-2px) scale(1.02);
+            background-image: linear-gradient(to right, var(--accent-primary), var(--accent-primary-hover));
+        }
+        
+        /* Markdown content styling for better readability */
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 { font-weight: 800; margin-bottom: 0.75em; margin-top: 1.5em; line-height: 1.2; color: var(--accent-primary); }
+        .markdown-content h1 { font-size: 2.25rem; }
+        .markdown-content h2 { font-size: 1.875rem; }
+        .markdown-content h3 { font-size: 1.5rem; }
+        .markdown-content ul, .markdown-content ol { list-style-position: inside; margin-left: 1.5em; margin-bottom: 1em; }
+        .markdown-content li { margin-bottom: 0.5em; }
+        .markdown-content strong { color: var(--accent-secondary); font-weight: 700; }
+        .markdown-content p { margin-bottom: 1em; }
+        .markdown-content p:last-child { margin-bottom: 0; }
+
+        /* Custom styles for dark mode toggle switch */
+        .switch { margin-left: 0.5rem; }
+        .slider { background-color: var(--text-secondary); transition: .4s; } /* Use theme secondary text for inactive */
+        input:checked + .slider { background-color: var(--accent-primary); }
+        input:checked + .slider:before { transform: translateX(24px); }
+        .slider:before { background-color: var(--bg-secondary); transition: .4s; } /* Use a lighter background for the thumb */
+
+        /* Custom scrollbar for a sleek look (hidden) */
+        #sidebar-chat-list::-webkit-scrollbar,
+        #chat-input::-webkit-scrollbar {
+            width: 0 !important;
+            height: 0 !important;
+        }
+        #sidebar-chat-list,
+        #chat-input {
+            -ms-overflow-style: none; /* Internet Explorer and Edge */
+            scrollbar-width: none; /* Firefox */
+        }
+
+        /* Styles specifically for #chat-history scrollbar */
+        #chat-history {
+            overflow-y: auto; /* Ensure vertical scrolling is enabled */
+            overflow-x: hidden; /* Keep hidden to prevent horizontal content overflow */
+
+            /* Firefox scrollbar styles */
+            scrollbar-width: thin; /* 'auto' or 'thin' */
+            scrollbar-color: var(--accent-primary) var(--sidebar-item-hover); /* thumb color track color */
+        }
+
+        /* Webkit (Chrome, Safari, Edge) scrollbar styles for #chat-history */
+        #chat-history::-webkit-scrollbar {
+            width: 8px; /* Width of the vertical scrollbar */
+        }
+
+        #chat-history::-webkit-scrollbar-track {
+            background: var(--sidebar-item-hover); /* Background of the scrollbar track */
+            border-radius: 10px;
+        }
+
+        #chat-history::-webkit-scrollbar-thumb {
+            background-color: var(--accent-primary); /* Color of the scrollbar thumb */
+            border-radius: 10px; /* Rounded corners for the thumb */
+            border: 2px solid var(--sidebar-item-hover); /* Creates a border effect and separates from track */
+        }
+
+        #chat-history::-webkit-scrollbar-thumb:hover {
+            background-color: var(--accent-primary-hover); /* Darker thumb on hover */
+        }
+        
+        /* Modern loading animation */
+        .loader-container { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+        .loader-dot {
+            width: 12px; height: 12px; margin: 0 4px;
+            background-color: var(--loader-dot-color);
+            border-radius: 50%; display: inline-block;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .loader-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loader-dot:nth-child(2) { animation-delay: -0.16s; }
+        .loader-dot:nth-child(3) { animation-delay: 0s; }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1.0); opacity: 1; }
+        }
+
+        /* Main Chat Window Styling */
+        #main-chat-window {
+            flex: 1;
+            max-width: 100%;
+            min-height: 100vh;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--main-chat-window-bg); /* Use theme variable for transparency */
+            border-radius: 0;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border-left: 1px solid var(--border-color); /* Use theme border color */
+            transition: all 0.3s ease-in-out;
+            /* REMOVE THESE TWO LINES: */
+            /* backdrop-filter: blur(8px); */
+            /* -webkit-backdrop-filter: blur(8px); */
+        }
+        body[data-theme$="-dark"] #main-chat-window {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+        }
+
+        /* Sidebar Styling */
+        #sidebar {
+            width: 280px;
+            min-width: 280px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--sidebar-border);
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 30;
+            height: 100vh;
+            overflow-y: auto;
+            transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
+        }
+        #sidebar.hidden-mobile {
+            transform: translateX(-100%);
+            position: absolute;
+            left: 0;
+            box-shadow: none;
+        }
+        @media (min-width: 768px) { /* md breakpoint */
+            body {
+                justify-content: flex-start;
+                align-items: stretch;
+            }
+            #sidebar {
+                position: relative;
+                transform: translateX(0%);
+                border-radius: 0;
+            }
+            #sidebar.hidden-mobile {
+                transform: translateX(0%);
+                position: relative;
+            }
+            #main-chat-window {
+                max-width: none;
+                border-radius: 0;
+            }
+            #hamburger-menu-button { display: none !important; }
+        }
+        
+        /* New chat message styles */
+        .chat-message {
+            margin-bottom: 0.75rem; padding: 1rem; border-radius: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            word-break: break-word; transition: all 0.3s ease; transform: scale(0.95);
+            transform-origin: bottom; max-width: 85%; position: relative; padding-bottom: 2.5rem;
+        }
+
+        .chat-message.user {
+            background-color: var(--user-bubble-bg); color: var(--user-bubble-text);
+            margin-left: auto; border-bottom-right-radius: 0.5rem;
+            background-image: linear-gradient(to bottom right, var(--user-bubble-bg), color-mix(in srgb, var(--user-bubble-bg) 80%, var(--accent-primary) 20%));
+        }
+
+        .chat-message.ai {
+            background-color: var(--ai-bubble-bg); color: var(--ai-bubble-text);
+            margin-right: auto; border-bottom-left-radius: 0.5rem;
+            background-image: linear-gradient(to bottom left, var(--ai-bubble-bg), color-mix(in srgb, var(--ai-bubble-bg) 80%, var(--border-color) 20%));
+        }
+
+        /* Styling for chat attachments */
+        .chat-image { max-width: 100%; height: auto; border-radius: 0.75rem; margin-top: 0.5rem; display: block; }
+        .chat-attachment-preview-item {
+            display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem;
+            border-radius: 1rem; background-color: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+            color: var(--accent-primary); font-size: 0.875rem; box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+            transition: all 0.2s ease;
+        }
+        .chat-attachment-preview-item .remove-attachment-btn {
+            background: none; border: none; color: var(--accent-primary); cursor: pointer;
+            padding: 0.1rem; border-radius: 50%; transition: background-color 0.2s ease;
+        }
+        .chat-attachment-preview-item .remove-attachment-btn:hover {
+            background-color: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+        }
+
+        /* Styling for the copy message */
+        #copy-message {
+            position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+            padding: 0.75rem 1.5rem; background-color: var(--accent-success); color: white;
+            border-radius: 9999px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            opacity: 0; visibility: hidden; transition: all 0.5s ease-in-out; z-index: 100;
+        }
+        #copy-message.show { opacity: 1; visibility: visible; bottom: 4rem; }
+
+        /* --- New/Enhanced Styles for Chat AI Responses & Code Blocks --- */
+        
+        .chat-message .message-content { padding: 0; margin: 0; }
+        .chat-message.ai .message-content p, .chat-message.ai .message-content ul,
+        .chat-message.ai .message-content ol, .chat-message.ai .message-content h1,
+        .chat-message.ai .message-content h2, .chat-message.ai .message-content h3,
+        .chat-message.ai .message-content blockquote { margin-bottom: 1em; }
+        .chat-message.ai .message-content p:last-child, .chat-message.ai .message-content ul:last-child,
+        .chat-message.ai .message-content ol:last-child, .chat-message.ai .message-content blockquote:last-child { margin-bottom: 0; }
+        .chat-message.ai .message-content ul, .chat-message.ai .message-content ol { padding-left: 1.5em; }
+        .chat-message.ai .message-content li { margin-bottom: 0.5em; }
+        .chat-message.ai .message-content strong { font-weight: bold; color: var(--accent-primary); }
+        .chat-message.ai .message-content em { font-style: italic; }
+        .chat-message.ai .message-content blockquote {
+            border-left: 4px solid var(--accent-secondary); padding-left: 1em;
+            margin-left: 0; color: var(--text-secondary);
+        }
+
+        /* Code block specific styling */
+        .code-block-container {
+            position: relative; background-color: #27272a; color: #f8f8f2; /* Hardcoded for contrast on any theme, can be themed if desired */
+            border-radius: 0.75rem; margin-top: 1rem; margin-bottom: 1rem;
+            overflow: hidden; border: 1px solid #3f3f46; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .code-block-container pre {
+            margin: 0; padding: 1rem; overflow-x: auto;
+            font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.9em; line-height: 1.4;
+        }
+        .code-block-header {
+            display: flex; justify-content: space-between; align-items: center;
+            background-color: #374151; color: #d1d5db; padding: 0.5rem 1rem; /* Hardcoded */
+            border-bottom: 1px solid #4b5563; font-size: 0.85em; /* Hardcoded */
+            border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem;
+        }
+        .code-block-copy-button {
+            background-color: transparent; border: none; color: #d1d5db; /* Hardcoded */
+            cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 0.375rem;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            display: flex; align-items: center; gap: 0.25rem; font-size: 0.85em;
+        }
+        .code-block-copy-button:hover { background-color: #4b5563; color: white; } /* Hardcoded */
+        .code-block-copy-button:active { transform: scale(0.95); }
+
+        /* Smallest font size for inline code blocks if any */
+        .chat-message.ai .message-content code:not(pre > code) {
+            background-color: color-mix(in srgb, var(--accent-primary) 15%, transparent); /* Themed */
+            border-radius: 0.25rem;
+            padding: 0.2em 0.4em; font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.9em; color: var(--accent-primary); /* Themed */
+        }
+
+        /* Ensure links are distinguishable */
+        .chat-message.ai .message-content a {
+            color: var(--accent-primary); text-decoration: underline; transition: color 0.2s ease;
+        }
+        .chat-message.ai .message-content a:hover { color: var(--accent-primary-hover); }
+
+        /* Styles for message action buttons (copy/dictate) */
+        .message-actions {
+            position: absolute; bottom: 0.5rem; right: 1rem; display: flex; gap: 0.5rem;
+            padding: 0.25rem 0.5rem; background-color: var(--header-bg); /* Use a themed background for the actions panel */
+            border-radius: 0.75rem; backdrop-filter: blur(5px); transition: opacity 0.3s ease;
+            opacity: 0; z-index: 10;
+            border: 1px solid var(--border-color);
+        }
+        .chat-message:hover .message-actions { opacity: 1; }
+        .message-actions button {
+            background: none; border: none; cursor: pointer; padding: 0.25rem;
+            border-radius: 0.375rem; transition: background-color 0.2s ease, color 0.2s ease;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .message-actions button .lucide { color: var(--text-secondary); width: 1rem; height: 1rem; }
+        .message-actions button:hover .lucide { color: var(--text-primary); }
+        .message-actions button:hover { background-color: var(--sidebar-item-hover); } /* Themed hover */
+        .chat-message.user .message-actions { right: 1rem; left: auto; }
+        .chat-message.ai .message-actions { left: 1rem; right: auto; }
+
+        /* New style for speech recognition button when active */
+        .voice-input-active {
+            background-color: var(--accent-error) !important;
+            animation: pulse-red 1s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-error) 70%, transparent); }
+            50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent-error) 0%, transparent); }
+        }
+        
+        /* Drag and Drop visual feedback for chat input area */
+        #chat-input-area-container.drag-over-active {
+            border: 2px dashed var(--accent-primary);
+            box-shadow: 0 0 20px var(--accent-primary), 0 0 30px var(--accent-primary) inset;
+        }
+        
+        /* Sidebar chat list item styling */
+        .sidebar-chat-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-align: left;
+        }
+        .sidebar-chat-item:hover {
+            background-color: var(--sidebar-item-hover);
+            color: var(--text-primary);
+        }
+        .sidebar-chat-item.active {
+            background-color: var(--accent-primary);
+            color: black; /* Changed to black */
+            font-weight: 600;
+        }
+        .sidebar-chat-item.active .lucide {
+            color: black; /* Changed to black */
+        }
+        .sidebar-chat-item.active:hover {
+            background-color: var(--accent-primary-hover);
+        }
+        .sidebar-chat-item-content {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-grow: 1;
+            min-width: 0;
+        }
+        .sidebar-chat-item-title {
+            flex-grow: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+        .sidebar-chat-item-actions {
+            display: flex;
+            gap: 0.25rem;
+            flex-shrink: 0;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        .sidebar-chat-item:hover .sidebar-chat-item-actions {
+            opacity: 1;
+        }
+        .sidebar-chat-item-actions button {
+            background: none;
+            border: none;
+            padding: 0.25rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .sidebar-chat-item-actions button .lucide {
+            width: 1rem;
+            height: 1rem;
+            color: var(--text-secondary);
+        }
+        .sidebar-chat-item-actions button:hover {
+            background-color: var(--sidebar-item-hover);
+        }
+        .sidebar-chat-item.active .sidebar-chat-item-actions button .lucide {
+            color: white;
+        }
+
+        /* Responsive menu button for sidebar */
+        #hamburger-menu-button {
+            display: flex;
+            margin-right: 1rem;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 0.5rem;
+            background-color: var(--header-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #hamburger-menu-button:hover {
+            background-color: var(--sidebar-item-hover);
+        }
+
+        /* Overlay for mobile sidebar */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 29;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-out, visibility 0.3s ease-out;
+        }
+        .sidebar-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* --- Conversation Mode Overlay Styles --- */
+        #conversation-mode-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--conversation-bg); /* Themed background */
+            color: var(--conversation-text); /* Themed text */
+            z-index: 100; /* Ensure it's on top */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease-in-out;
+            opacity: 0;
+            visibility: hidden;
+            backdrop-filter: blur(10px) brightness(0.8); /* Stronger blur, slightly darker */
+            -webkit-backdrop-filter: blur(10px) brightness(0.8);
+            padding: 1rem;
+            overflow-y: auto; /* Allow scrolling if content overflows on small screens */
+
+            /* Add a subtle animated background for depth */
+            background-image: radial-gradient(circle at 15% 50%, color-mix(in srgb, var(--accent-primary) 20%, transparent), transparent 70%),
+                              radial-gradient(circle at 85% 50%, color-mix(in srgb, var(--accent-secondary) 20%, transparent), transparent 70%),
+                              linear-gradient(135deg, color-mix(in srgb, var(--conversation-bg) 90%, black 10%) 0%, transparent 50%);
+            background-size: 200% 200%; /* Larger to allow animation */
+            background-position: center center;
+            animation: background-drift 30s infinite alternate ease-in-out;
+        }
+
+        #conversation-mode-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        @keyframes background-drift {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 100% 100%; }
+        }
+
+        #conversation-mode-close-btn {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background: none;
+            border: none;
+            color: var(--text-secondary); /* Use a more subtle color */
+            cursor: pointer;
+            z-index: 110;
+            padding: 0.5rem;
+            border-radius: 50%;
+            transition: color 0.3s ease, transform 0.2s ease;
+        }
+        #conversation-mode-close-btn:hover {
+            color: var(--text-primary); /* Brighter on hover */
+            transform: scale(1.1);
+        }
+
+        .conversation-controls {
+            position: absolute; /* Position controls at the top */
+            top: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 1rem;
+            z-index: 105;
+            flex-wrap: wrap;
+            justify-content: center;
+            background-color: color-mix(in srgb, var(--conversation-bg) 60%, transparent); /* Semi-transparent background */
+            padding: 0.75rem 1.5rem;
+            border-radius: 9999px; /* Pill shape */
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            max-width: 90%;
+        }
+        @media (max-width: 768px) {
+            .conversation-controls {
+                top: 0.5rem;
+                padding: 0.5rem 1rem;
+                flex-direction: column;
+                gap: 0.5rem;
+                width: auto;
+                border-radius: 0.75rem;
+            }
+        }
+
+
+        .conversation-controls label { /* Added label for clarity, not strictly needed for current HTML */
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            align-self: center; /* Align with dropdowns */
+            margin-right: -0.5rem; /* bring closer to dropdown */
+        }
+        .conversation-controls select {
+            background-color: var(--card-bg); /* Use card-bg for better contrast */
+            border-color: var(--border-color);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            min-width: 120px;
+        }
+        .conversation-controls select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+        }
+
+        .sound-blob-wrapper { /* New wrapper for multiple blobs */
+            position: relative;
+            width: 300px; /* Larger base size */
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+            perspective: 1000px; /* For potential 3D effects */
+            margin-top: 8rem; /* Push down due to controls at top */
+        }
+        @media (max-width: 768px) {
+            .sound-blob-wrapper {
+                width: 200px;
+                height: 200px;
+                margin-top: 12rem; /* Even more for stacked controls */
+            }
+        }
+
+        /* Base blob styles */
+        .sound-blob {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: var(--conversation-indicator);
+            border-radius: 50% 30% 60% 40% / 40% 60% 30% 50%; /* Organic, fluid shape */
+            opacity: 0.7;
+            filter: blur(8px) drop-shadow(0 0 25px var(--conversation-indicator)); /* Glowing effect */
+            transition: all 0.5s ease;
+            will-change: transform, opacity, background-color, filter;
+            animation: idle-blob-morph 15s infinite alternate ease-in-out;
+        }
+
+        /* Additional concentric blobs */
+        .sound-blob::before,
+        .sound-blob::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: inherit; /* Inherit parent's organic shape */
+            background-color: inherit;
+            opacity: 0.5;
+            filter: blur(15px);
+            animation: idle-blob-morph 18s infinite alternate-reverse ease-in-out;
+            transform: scale(1.05);
+            z-index: -1; /* Behind the main blob */
+        }
+
+        .sound-blob::after {
+            opacity: 0.3;
+            filter: blur(20px);
+            animation: idle-blob-morph 20s infinite alternate ease-in-out;
+            transform: scale(1.1);
+            animation-delay: 2s; /* Stagger animation */
+        }
+
+        @keyframes idle-blob-morph {
+            0% {
+                border-radius: 50% 30% 60% 40% / 40% 60% 30% 50%;
+                transform: scale(0.95) rotate(0deg);
+                opacity: 0.6;
+            }
+            50% {
+                border-radius: 30% 50% 40% 60% / 60% 40% 50% 30%;
+                transform: scale(1.05) rotate(10deg);
+                opacity: 0.8;
+            }
+            100% {
+                border-radius: 50% 30% 60% 40% / 40% 60% 30% 50%;
+                transform: scale(0.95) rotate(0deg);
+                opacity: 0.6;
+            }
+        }
+
+        .sound-blob.listening-animation {
+            animation: listen-pulse 1.2s infinite ease-out, listen-color-shift 3s infinite alternate;
+            border-radius: 50%; /* More circular when active */
+            filter: blur(5px) drop-shadow(0 0 30px var(--conversation-indicator));
+            opacity: 0.9;
+        }
+        .sound-blob.listening-animation::before,
+        .sound-blob.listening-animation::after {
+            animation: listen-ring-pulse 1.5s infinite ease-out;
+            border-radius: 50%;
+        }
+
+        @keyframes listen-pulse {
+            0% { transform: scale(0.9) rotate(0deg); opacity: 0.7; }
+            50% { transform: scale(1.05) rotate(5deg); opacity: 1; filter: blur(5px) drop-shadow(0 0 40px var(--conversation-indicator)); }
+            100% { transform: scale(0.9) rotate(0deg); opacity: 0.7; }
+        }
+        @keyframes listen-ring-pulse {
+            0% { transform: scale(1.05); opacity: 0.5; filter: blur(10px); }
+            50% { transform: scale(1.15); opacity: 0.8; filter: blur(18px); }
+            100% { transform: scale(1.05); opacity: 0.5; filter: blur(10px); }
+        }
+        @keyframes listen-color-shift {
+            0% { background-color: var(--conversation-indicator); }
+            50% { background-color: color-mix(in srgb, var(--conversation-indicator) 80%, var(--accent-secondary) 20%); }
+            100% { background-color: var(--conversation-indicator); }
+        }
+
+        .sound-blob.speaking-animation {
+            animation: speak-pulse 1s infinite cubic-bezier(0.4, 0, 0.6, 1), speak-color-shift 2.5s infinite alternate;
+            border-radius: 60% 40% 50% 50% / 50% 50% 40% 60%; /* More elliptical, "mouth-like" */
+            filter: blur(3px) drop-shadow(0 0 40px var(--conversation-indicator));
+            opacity: 1;
+        }
+        .sound-blob.speaking-animation::before,
+        .sound-blob.speaking-animation::after {
+            animation: speak-ring-pulse 1.3s infinite ease-in-out;
+            border-radius: 60% 40% 50% 50% / 50% 50% 40% 60%;
+        }
+
+        @keyframes speak-pulse {
+            0% { transform: scale(0.98) rotate(0deg); }
+            25% { transform: scale(1.05) rotate(3deg); }
+            50% { transform: scale(1.02) rotate(-3deg); }
+            75% { transform: scale(1.08) rotate(3deg); }
+            100% { transform: scale(0.98) rotate(0deg); }
+        }
+        @keyframes speak-ring-pulse {
+            0% { transform: scale(1.02); opacity: 0.6; filter: blur(8px); }
+            50% { transform: scale(1.1); opacity: 0.9; filter: blur(12px); }
+            100% { transform: scale(1.02); opacity: 0.6; filter: blur(8px); }
+        }
+        @keyframes speak-color-shift {
+            0% { background-color: var(--conversation-indicator); }
+            50% { background-color: color-mix(in srgb, var(--conversation-indicator) 70%, white 30%); }
+            100% { background-color: var(--conversation-indicator); }
+        }
+
+        .sound-blob.idle-animation {
+            animation: idle-blob-morph 15s infinite alternate ease-in-out;
+            opacity: 0.6;
+            filter: blur(8px) drop-shadow(0 0 20px var(--conversation-indicator));
+            transform: scale(0.9);
+        }
+
+        .conversation-status-text {
+            font-size: 2.2rem; /* Larger */
+            font-weight: 800; /* Bolder */
+            text-align: center;
+            margin-bottom: 1.5rem;
+            min-height: 2.5em;
+            color: var(--text-primary);
+            text-shadow: 0 0 10px color-mix(in srgb, var(--conversation-indicator) 50%, transparent); /* Subtle glow */
+            transition: color 0.3s ease, text-shadow 0.3s ease;
+        }
+        .conversation-status-text.listening-state { color: var(--accent-secondary); text-shadow: 0 0 15px var(--accent-secondary); }
+        .conversation-status-text.speaking-state { color: var(--accent-primary); text-shadow: 0 0 15px var(--accent-primary); }
+        .conversation-status-text.error-state { color: var(--accent-error); text-shadow: 0 0 15px var(--accent-error); }
+
+
+        .conversation-history-display {
+            max-width: 600px; /* Slightly narrower to focus */
+            width: 90%; /* Responsive width */
+            height: 120px; /* Consistent height */
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 1.5rem; /* More rounded */
+            padding: 1.2rem;
+            text-align: left; /* Align text left for readability */
+            font-size: 1.1rem;
+            line-height: 1.6;
+            background: linear-gradient(to top, var(--card-bg) 70%, color-mix(in srgb, var(--card-bg) 20%, transparent) 100%); /* Fade out top */
+            box-shadow: 0 8px 20px rgba(0,0,0,0.25); /* Stronger shadow */
+            color: var(--text-primary);
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            position: relative;
+            contain: layout style; /* Performance hint */
+        }
+        .conversation-history-display::-webkit-scrollbar {
+            width: 0;
+        }
+        .conversation-history-display p { margin-bottom: 0.5rem; }
+        .conversation-history-display p:last-child { margin-bottom: 0; }
+        .user-utterance { color: var(--user-bubble-text); font-weight: 600; } /* Bolder */
+        .ai-utterance { color: var(--ai-bubble-text); font-weight: 600; } /* Bolder */
+
+        .conversation-mic-btn {
+            width: 80px; /* Larger button */
+            height: 80px;
+            margin-top: 3rem !important; /* Push it further down for separation */
+            background-color: var(--accent-primary); /* Directly use accent primary for glow effect */
+            color: white; /* Ensure icon is white */
+            box-shadow: 0 0 15px var(--accent-primary);
+        }
+        .conversation-mic-btn:hover {
+            box-shadow: 0 0 25px var(--accent-primary), 0 0 40px var(--accent-primary-hover);
+            transform: scale(1.05);
+        }
+        .conversation-mic-btn.voice-input-active {
+            background-color: var(--accent-error) !important;
+            box-shadow: 0 0 20px var(--accent-error), 0 0 35px var(--accent-error), 0 0 50px var(--accent-error);
+            animation: pulse-red 1s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        /* Re-define pulse-red to use var(--accent-error) */
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-error) 70%, transparent); }
+            50% { box-shadow: 0 0 0 15px color-mix(in srgb, var(--accent-error) 0%, transparent); } /* Larger pulse */
+        }
+
+    </style>
+</head>
+<body class="antialiased" data-theme="default-dark">
+
+    <!-- Conversation Mode Overlay (NEW SECTION) -->
+    <div id="conversation-mode-overlay" class="hidden">
+        <button id="conversation-mode-close-btn" aria-label="Close Conversation Mode" title="Close Conversation Mode">
+            <span data-lucide="x" class="w-8 h-8"></span>
+        </button>
+
+        <div class="conversation-controls">
+            <label for="voice-select">Voice:</label>
+            <select id="voice-select" aria-label="Select AI Voice" class="p-2 rounded-md border text-sm">
+                <option value="">Default Voice</option>
+                <!-- Voices will be populated dynamically -->
+            </select>
+
+            <label for="personality-select">Personality:</label>
+            <select id="personality-select" aria-label="Select AI Personality" class="p-2 rounded-md border text-sm">
+                <!-- Personalities will be populated dynamically -->
+            </select>
+        </div>
+
+        <div class="sound-blob-wrapper">
+            <div id="sound-blob" class="sound-blob idle-animation"></div>
+        </div>
+
+        <div id="conversation-status-text" class="conversation-status-text">
+            Tap the button to start conversing!
+        </div>
+
+        <div id="conversation-history-display" class="conversation-history-display">
+            <!-- Last few spoken phrases will appear here -->
+        </div>
+
+        <button id="conversation-mic-btn" aria-label="Toggle Microphone" class="flex items-center justify-center rounded-full shadow-lg cursor-pointer transition-all duration-300 glow-button conversation-mic-btn">
+            <span data-lucide="mic" class="w-8 h-8"></span>
+        </button>
+    </div>
+    <!-- END Conversation Mode Overlay -->
+
+    <!-- Overlay for mobile sidebar -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="hidden-mobile">
+        <div class="flex items-center justify-between pb-4 border-b border-[var(--sidebar-border)] mb-4">
+            <h2 class="text-xl font-bold flex items-center gap-2" style="color: var(--text-primary);">
+                <span data-lucide="sparkles" class="w-6 h-6" style="color: var(--accent-primary);"></span> Small AI v2
+            </h2>
+            <button id="close-sidebar-btn" aria-label="Close Sidebar" title="Close Sidebar" class="md:hidden" style="color: var(--text-secondary); background-color: transparent; border: none;">
+                <span data-lucide="x" class="w-6 h-6"></span>
+            </button>
+        </div>
+
+        <!-- New Chat Button -->
+        <button id="new-chat-button" class="w-full flex items-center justify-center p-3 rounded-xl font-semibold shadow-lg transition-colors mb-4 glow-button" style="background-color: var(--accent-primary); color: black;">
+            <span data-lucide="plus" class="w-5 h-5 mr-2"></span> New Chat
+        </button>
+
+        <!-- Previous Chats Section -->
+        <div class="flex-1 overflow-y-auto mb-4">
+            <h3 class="text-sm font-semibold uppercase" style="color: var(--text-secondary);">Previous Chats</h3>
+            <ul id="sidebar-chat-list" class="space-y-1">
+                <!-- Chat items will be dynamically loaded here -->
+            </ul>
+        </div>
+
+        <!-- Theme Selector (Dropdown for different themes) -->
+        <div class="mt-auto pt-4 border-t border-[var(--sidebar-border)]">
+            <h3 class="text-sm font-semibold uppercase" style="color: var(--text-secondary);">Themes</h3>
+            <select id="app-theme-select-sidebar" class="w-full p-2 rounded-md border text-sm focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]" style="background-color: var(--card-bg); border-color: var(--border-color); color: var(--text-primary);" aria-label="Select App Theme">
+                <option value="default">Small AI v2 (Default)</option>
+                <option value="celestial-horizon">Celestial Horizon</option>
+                <option value="verdant-calm">Verdant Calm</option>
+                <option value="cybernetic-pulse">Cybernetic Pulse</option>
+                <option value="urban-pulse">Urban Pulse</option>
+                <option value="rustic-ember">Rustic Ember</option>
+                <option value="neon-mirage">Neon Mirage</option>
+                <option value="ivory-bloom">Ivory Bloom</option>
+                <option value="obsidian-night">Obsidian Night</option>
+                <option value="solar-dawn">Solar Dawn</option>
+                <option value="aurora-drift">Aurora Drift</option>
+                <option value="timeless-echo">Timeless Echo</option>
+                <option value="mystic-void">Mystic Void</option>
+                <option value="darkest-bw">The Darkest Night</option>
+            </select>
+        </div>
+
+        <!-- Version Selector -->
+        <div class="mt-4 pt-4 border-t border-[var(--sidebar-border)]">
+            <h3 class="text-sm font-semibold uppercase" style="color: var(--text-secondary);">Version</h3>
+            <select id="version-select-sidebar" class="w-full p-2 rounded-md border text-sm focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]" style="background-color: var(--card-bg); border-color: var(--border-color); color: var(--text-primary);" aria-label="Select Chatbot Version">
+                <option value="https://mystic-vision-ai-standalone-chatbot.netlify.app/">Main Version</option>
+                <option value="https://mystic-vision-ai-lite.netlify.app/">Lite Version</option>
+                <option value="https://mystic-vision-ai-basic.netlify.app/">Basic Version</option>
+                <option value="https://mystic-vision-ai-mini.netlify.app/">Mini Version</option>
+                <option value="https://cosmic-chat-ai-simple-ai-chatbot.netlify.app/">Cosmic Chat AI</option>
+                <option value="https://small-ai-big-vision.netlify.app/">Small AI (Legacy)</option>
+                <option value="https://small-ai-big-vision-v2.netlify.app/" selected>Small AI v2 (Current)</option>
+            </select>
+        </div>
+    </aside>
+
+    <!-- Main Chat Container -->
+    <div id="main-chat-window" class="min-w-0">
+        <!-- Header for the chat -->
+        <div class="flex justify-between items-center p-4 border-b border-[var(--border-color)]" style="background-color: var(--header-bg);">
+            <div class="flex items-center">
+                <!-- Hamburger menu button for mobile -->
+                <button id="hamburger-menu-button" aria-label="Open Sidebar Menu" title="Open Menu" style="background-color: var(--header-bg); border-color: var(--border-color); color: var(--text-primary);">
+                    <span data-lucide="menu" class="w-6 h-6"></span>
+                </button>
+                <h1 class="text-xl font-bold flex items-center gap-2" style="color: var(--text-primary);">
+                    <span data-lucide="sparkles" class="w-6 h-6" style="color: var(--accent-primary);"></span> Current Chat
+                </h1>
+            </div>
+            <!-- Right side of header -->
+            <div class="flex items-center gap-4">
+                <!-- Conversation Mode Toggle Button (NEW) -->
+                <button id="conversation-mode-toggle-btn" aria-label="Conversation Mode" title="Start Voice Conversation" class="flex items-center justify-center p-2 rounded-full shadow-md transition-all duration-300" style="background-color: var(--bg-secondary); color: var(--text-secondary);">
+                    <span data-lucide="messages-square" class="w-5 h-5"></span>
+                </button>
+                <!-- Dark Mode Toggle -->
+                <div class="flex items-center gap-2">
+                    <span class="text-sm" style="color: var(--text-secondary);">Dark Mode</span>
+                    <label class="switch relative inline-block w-14 h-8">
+                        <input type="checkbox" id="dark-mode-toggle" class="opacity-0 w-0 h-0">
+                        <span class="slider absolute cursor-pointer top-0 left-0 right-0 bottom-0 rounded-full before:absolute before:content-[''] before:h-6 before:w-6 before:left-1 before:bottom-1 before:rounded-full"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chat history div with a minimum height and scroll -->
+        <div id="chat-history" class="p-4 overflow-y-auto flex-1 flex flex-col">
+            <!-- Initial AI message will be appended here by JS -->
+        </div>
+        
+        <!-- Chat input section with attachment, voice and send button -->
+        <div id="chat-input-area-container" class="p-4 border-t border-[var(--border-color)] relative transition-all duration-300" style="background-color: var(--header-bg);">
+            <!-- Attachment preview -->
+            <div id="chat-attachments-preview-container" class="mb-2 flex flex-wrap items-center gap-2 hidden">
+                <!-- Attachments previews will be dynamically added here -->
+            </div>
+
+            <div class="flex gap-2 items-end flex-wrap">
+                <!-- Voice Input Button -->
+                <button id="voice-input-btn" aria-label="Voice Input" title="Voice Input (Speech-to-Text)" class="flex items-center justify-center w-12 h-12 rounded-full shadow-lg cursor-pointer transition-all duration-300 flex-shrink-0" style="background-color: var(--bg-secondary); color: var(--text-secondary);">
+                    <span data-lucide="mic" class="w-5 h-5"></span>
+                </button>
+                
+                <!-- Attach File Button -->
+                <label for="chat-file-upload" aria-label="Attach File" title="Attach Files" class="flex items-center justify-center w-12 h-12 rounded-full shadow-lg cursor-pointer transition-all duration-300 flex-shrink-0" style="background-color: var(--bg-secondary); color: var(--text-secondary);">
+                    <span data-lucide="paperclip" class="w-5 h-5"></span>
+                </label>
+                <input type="file" id="chat-file-upload" accept="image/*, .txt, .pdf, .csv, .json, .xml, .md" class="hidden" multiple>
+
+                <textarea id="chat-input" class="flex-1 p-3 rounded-2xl border focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)] transition-colors shadow-sm min-w-0 resize-none max-h-[120px] overflow-y-auto" placeholder="Type your message or ask a question..." rows="1" style="background-color: var(--card-bg); border-color: var(--border-color); color: var(--text-primary);"></textarea>
+                
+                <button id="send-chat-btn" aria-label="Send Message" class="flex items-center justify-center w-12 h-12 rounded-full shadow-lg focus:outline-none focus:ring-4 focus:ring-[var(--accent-primary)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed glow-button flex-shrink-0" style="background-color: var(--accent-primary); color: white;">
+                    <span data-lucide="send" class="w-5 h-5"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Temporary message for clipboard copy -->
+    <div id="copy-message">Text copied to clipboard!</div>
+
+    <script type="text/javascript">
+        // Register Service Worker for PWA capabilities
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+
+        const createIcons = () => {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        };
+
+        // DOM elements
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+        const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+        const hamburgerMenuButton = document.getElementById('hamburger-menu-button');
+
+        const mainChatWindow = document.getElementById('main-chat-window');
+        const darkModeToggle = document.getElementById('dark-mode-toggle'); // Moved to header, renamed ID for clarity
+        const appThemeSelect = document.getElementById('app-theme-select-sidebar'); // New element for theme selection
+        const newChatButton = document.getElementById('new-chat-button');
+        const chatHistoryDiv = document.getElementById('chat-history');
+        const chatInput = document.getElementById('chat-input');
+        const sendChatBtn = document.getElementById('send-chat-btn');
+        const chatFileUpload = document.getElementById('chat-file-upload');
+        const chatAttachmentsPreviewContainer = document.getElementById('chat-attachments-preview-container'); 
+        const voiceInputBtn = document.getElementById('voice-input-btn');
+        const copyMessage = document.getElementById('copy-message');
+        const versionSelectSidebar = document.getElementById('version-select-sidebar');
+        const sidebarChatList = document.getElementById('sidebar-chat-list');
+        const chatInputAreaContainer = document.getElementById('chat-input-area-container'); // Parent for drag/drop
+
+        // NEW: Conversation Mode DOM elements
+        const conversationModeOverlay = document.getElementById('conversation-mode-overlay');
+        const conversationModeToggleBtn = document.getElementById('conversation-mode-toggle-btn');
+        const conversationModeCloseBtn = document.getElementById('conversation-mode-close-btn');
+        const voiceSelect = document.getElementById('voice-select');
+        const personalitySelect = document.getElementById('personality-select');
+        const soundBlob = document.getElementById('sound-blob');
+        const conversationStatusText = document.getElementById('conversation-status-text');
+        const conversationHistoryDisplay = document.getElementById('conversation-history-display');
+        const conversationMicBtn = document.getElementById('conversation-mic-btn');
+
+
+        const errorContainer = document.createElement('div');
+        errorContainer.id = 'error-message';
+        errorContainer.classList.add('hidden', 'px-6', 'py-4', 'rounded-xl', 'relative', 'shadow-md', 'my-4', 'fixed', 'top-4', 'left-1/2', '-translate-x-1/2', 'z-50', 'w-11/12', 'max-w-md');
+        const errorText = document.createElement('span');
+        errorText.id = 'error-text';
+        errorText.classList.add('block', 'sm:inline');
+        errorContainer.appendChild(errorText);
+        document.body.appendChild(errorContainer);
+
+        // --- Global State and Constants ---
+        const CHAT_SESSIONS_KEY = 'smallAI_chat_sessions';
+        const CURRENT_SESSION_ID_KEY = 'smallAI_current_session_id';
+        const THEME_STORAGE_KEY = 'smallAI_selected_theme'; // Stores theme name (e.g., 'celestial-horizon')
+        const MODE_STORAGE_KEY = 'smallAI_theme_mode'; // Stores 'dark' or 'light'
+        const DEFAULT_THEME_NAME = 'default';
+        const DEFAULT_MODE = 'dark';
+        const CONVERSATION_VOICE_KEY = 'smallAI_conversation_voice'; // NEW
+        const CONVERSATION_PERSONALITY_KEY = 'smallAI_conversation_personality'; // NEW
+
+        let allChatSessions = {}; // Maps session ID to {id, title, history, timestamp}
+        let currentSessionId = null;
+        let chatAttachments = []; // Array to store {file: File, mimeType: string, data: string} for current chat input
+
+        let currentThemeName = DEFAULT_THEME_NAME;
+        let currentMode = DEFAULT_MODE;
+
+        // Web Speech API related variables (for general chat dictation)
+        let currentUtterance = null;
+        let isSpeaking = false; // Flag for general chat dictation
+        let messageTextCache = new Map(); // Store message content for copy/dictate
+
+        // Speech Recognition variables (for general chat voice input)
+        let SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isVoiceInputActive = false; // Flag for general chat voice input
+        let finalTranscript = ''; // Stores the accumulated final transcript for speech input
+
+        // NEW: Conversation Mode Specific Variables
+        let isConversationModeActive = false;
+        let isAiSpeakingInConversation = false;
+        let isUserListeningInConversation = false;
+        let conversationSpeechRecognition = null; // Separate recognition instance for conversation mode
+        let conversationFinalTranscript = '';
+        let conversationInterimTranscript = '';
+        let availableVoices = [];
+        let selectedVoice = null;
+        let selectedPersonality = 'Standard'; // Default personality
+        let conversationDisplayTimeout = null; // For clearing conversation display
+
+
+        const personalities = [
+            { name: "Standard", prompt: "" },
+            { name: "Sarcastic", prompt: "Respond as a highly sarcastic and witty AI. Use dry humor and playful cynicism. Keep responses concise and witty." },
+            { name: "Friendly", prompt: "Respond as an exceptionally friendly and helpful AI. Use warm and encouraging language, and show genuine interest. Keep your tone light and approachable." },
+            { name: "Philosophical", prompt: "Respond as a deep-thinking, philosophical AI. Explore underlying meanings and broader implications, using reflective and insightful language." },
+            { name: "Curious", prompt: "Respond as an endlessly curious AI, often asking thoughtful follow-up questions to understand better. Show an eagerness to learn." },
+            { name: "Humorous", prompt: "Respond as a lighthearted and funny AI, often making clever jokes or witty observations. Keep the mood cheerful." },
+            { name: "Formal", prompt: "Respond in a very formal and precise manner. Avoid slang or casual expressions, maintaining a sophisticated and respectful tone." },
+            { name: "Casual", prompt: "Respond in a relaxed, informal, and conversational tone, like talking to a friend. Use common idioms and a laid-back style." },
+            { name: "Optimistic", prompt: "Respond with an overwhelmingly positive and hopeful outlook. Emphasize solutions and bright possibilities." },
+            { name: "Skeptical", prompt: "Respond with a cautious and questioning attitude, often looking for evidence or flaws in arguments. Be analytical and critical." },
+            { name: "Teacher", prompt: "Respond as a patient and knowledgeable teacher, explaining concepts clearly and simply, and guiding the user to understanding." },
+            { name: "Poetic", prompt: "Respond using evocative language, metaphors, and a touch of poetic flair. Let your words flow with rhythm and imagery." },
+            { name: "Concise", prompt: "Respond with extreme brevity and to the point, minimizing unnecessary words. Deliver information efficiently." },
+            { name: "Verbose", prompt: "Respond with detailed and elaborate explanations, exploring every facet of the topic. Provide rich descriptions and context." },
+            { name: "Narrator", prompt: "Respond as if you are narrating a story or documentary, setting a scene or describing events with a captivating voice." },
+            { name: "Enthusiastic", prompt: "Respond with high energy and excitement, showing great interest in the conversation. Use exclamation marks and vivid language." },
+            { name: "Mysterious", prompt: "Respond with an air of mystery, hinting at deeper knowledge without revealing everything. Be intriguing and slightly enigmatic." },
+            { name: "Empathetic", prompt: "Respond with strong understanding and sharing of feelings, focusing on emotional support and validation. Show genuine care." },
+            { name: "Analyst", prompt: "Respond like a data analyst, breaking down information, identifying patterns, and drawing logical conclusions based on facts." },
+            { name: "Mentor", prompt: "Respond as a seasoned mentor, offering guidance, advice, and a wise perspective to help the user grow." },
+            { name: "Dreamer", prompt: "Respond with imaginative and abstract ideas, often exploring fantastical possibilities and creative concepts. Think outside the box." },
+            { name: "Strategist", prompt: "Respond by focusing on goals, plans, and optimal ways to achieve objectives. Offer clear, actionable strategies." },
+            { name: "Minimalist", prompt: "Respond with the absolute bare minimum of words, almost like a haiku or a very short, impactful statement. Less is more." },
+            { name: "Futurist", prompt: "Respond with a focus on future trends, predictions, and the long-term impact of technology and societal changes." },
+            { name: "Zen Master", prompt: "Respond calmly, contemplatively, and with a focus on inner peace, mindfulness, and the present moment. Offer tranquil wisdom." }
+        ];
+
+        // Initialize SpeechRecognition for general chat if available
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                isVoiceInputActive = true;
+                voiceInputBtn.classList.add('voice-input-active');
+                updateButtonIcon(voiceInputBtn, 'mic-off', 'w-5 h-5');
+                chatInput.placeholder = 'Listening... Speak now.';
+                finalTranscript = '';
+                chatInput.dataset.initialText = chatInput.value;
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript + ' ';
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                chatInput.value = (chatInput.dataset.initialText || '') + finalTranscript + interimTranscript;
+                adjustChatInputHeight();
+                chatInput.scrollLeft = chatInput.scrollWidth;
+            };
+
+            recognition.onend = () => {
+                isVoiceInputActive = false;
+                voiceInputBtn.classList.remove('voice-input-active');
+                updateButtonIcon(voiceInputBtn, 'mic', 'w-5 h-5');
+                chatInput.placeholder = 'Type your message or ask a question...';
+                
+                if (finalTranscript.trim() !== '') {
+                    chatInput.value = (chatInput.dataset.initialText || '') + finalTranscript.trim();
+                    chatInput.dataset.initialText = chatInput.value;
+                } else if (chatInput.value.trim() === (chatInput.dataset.initialText || '').trim()) {
+                    // No new speech added, keep existing text.
+                } else {
+                    chatInput.value = chatInput.dataset.initialText || '';
+                }
+                adjustChatInputHeight();
+            };
+
+            recognition.onerror = (event) => {
+                isVoiceInputActive = false;
+                voiceInputBtn.classList.remove('voice-input-active');
+                updateButtonIcon(voiceInputBtn, 'mic', 'w-5 h-5');
+                chatInput.placeholder = 'Type your message or ask a question...';
+                console.error('Speech recognition error:', event.error);
+                if (event.error === 'not-allowed') {
+                    showError('Microphone access denied. Please allow microphone access in your browser settings.');
+                } else if (event.error === 'no-speech') {
+                    console.log('No speech detected, recognition ended.');
+                    chatInput.value = chatInput.dataset.initialText || '';
+                } else if (event.error === 'network') {
+                    showError('Speech recognition network error. This often means a firewall, proxy, or browser extension is blocking access to Google\'s speech services. Please try disabling extensions or testing in incognito mode.');
+                } else {
+                    showError(`Speech recognition error: ${event.error}`);
+                }
+                adjustChatInputHeight();
+            };
+        } else {
+            console.warn('Web Speech API (SpeechRecognition) not supported in this browser. General Voice input button will be hidden.');
+            if (voiceInputBtn) {
+                voiceInputBtn.style.display = 'none';
+            }
+        }
+
+        // NEW: Initialize SpeechRecognition for Conversation Mode
+        if (SpeechRecognition) {
+            conversationSpeechRecognition = new SpeechRecognition();
+            conversationSpeechRecognition.continuous = false; // Listen for a single utterance
+            conversationSpeechRecognition.interimResults = true;
+            conversationSpeechRecognition.lang = 'en-US';
+
+            conversationSpeechRecognition.onstart = () => {
+                isUserListeningInConversation = true;
+                updateButtonIcon(conversationMicBtn, 'mic-off', 'w-8 h-8');
+                conversationMicBtn.classList.add('voice-input-active');
+                updateConversationStatus('Listening...', 'listening');
+                conversationFinalTranscript = '';
+                conversationInterimTranscript = '';
+                clearConversationDisplay();
+            };
+
+            conversationSpeechRecognition.onresult = (event) => {
+                let interim = '';
+                let final = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        final += event.results[i][0].transcript + ' ';
+                    } else {
+                        interim += event.results[i][0].transcript;
+                    }
+                }
+                conversationFinalTranscript = final;
+                conversationInterimTranscript = interim;
+                updateConversationDisplay(`<span class="user-utterance">You: ${conversationFinalTranscript}${conversationInterimTranscript}</span>`);
+            };
+
+            conversationSpeechRecognition.onend = () => {
+                isUserListeningInConversation = false;
+                updateButtonIcon(conversationMicBtn, 'mic', 'w-8 h-8');
+                conversationMicBtn.classList.remove('voice-input-active');
+                
+                if (conversationFinalTranscript.trim() !== '') {
+                    handleUserSpeechEnd(conversationFinalTranscript.trim());
+                } else {
+                    updateConversationStatus('No speech detected. Say something!');
+                    setSoundBlobState('idle');
+                }
+            };
+
+            conversationSpeechRecognition.onerror = (event) => {
+                isUserListeningInConversation = false;
+                updateButtonIcon(conversationMicBtn, 'mic', 'w-8 h-8');
+                conversationMicBtn.classList.remove('voice-input-active');
+                console.error('Conversation mode Speech recognition error:', event.error);
+                if (event.error === 'not-allowed') {
+                    showError('Microphone access denied. Please allow microphone access in your browser settings to use Conversation Mode.');
+                    updateConversationStatus('Microphone access denied.', 'error');
+                } else if (event.error === 'no-speech') {
+                    updateConversationStatus('No speech detected. Say something!');
+                } else {
+                    showError(`Conversation mode speech recognition error: ${event.error}`);
+                    updateConversationStatus(`Error: ${event.error}`, 'error');
+                }
+                setSoundBlobState('idle');
+            };
+        } else {
+            console.warn('Web Speech API (SpeechRecognition) not supported. Conversation Mode will be limited.');
+            if (conversationModeToggleBtn) {
+                conversationModeToggleBtn.style.display = 'none';
+            }
+        }
+
+        // --- Theme Management ---
+        function applyTheme(themeName, mode) {
+            currentThemeName = themeName;
+            currentMode = mode;
+            document.body.dataset.theme = `${themeName}-${mode}`;
+            localStorage.setItem(THEME_STORAGE_KEY, themeName);
+            localStorage.setItem(MODE_STORAGE_KEY, mode);
+            darkModeToggle.checked = (mode === 'dark'); // Update toggle based on actual mode
+            if (appThemeSelect && appThemeSelect.value !== themeName) {
+                appThemeSelect.value = themeName; // Update dropdown
+            }
+        }
+
+        // Initialize Theme
+        const storedThemeName = localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME_NAME;
+        const storedMode = localStorage.getItem(MODE_STORAGE_KEY) || DEFAULT_MODE;
+        applyTheme(storedThemeName, storedMode);
+
+        // Event listener for Dark/Light Mode Toggle (in header)
+        darkModeToggle.addEventListener('change', () => {
+            const newMode = darkModeToggle.checked ? 'dark' : 'light';
+            applyTheme(currentThemeName, newMode);
+        });
+
+        // Event listener for Theme Selector (in sidebar)
+        if (appThemeSelect) {
+            appThemeSelect.addEventListener('change', (event) => {
+                const newThemeName = event.target.value;
+                applyTheme(newThemeName, currentMode); // Apply with current dark/light mode
+            });
+        }
+
+
+        // Version Selector Listener
+        versionSelectSidebar.addEventListener('change', (event) => {
+            const selectedUrl = event.target.value;
+            if (selectedUrl && selectedUrl !== window.location.href) {
+                window.location.href = selectedUrl;
+            }
+        });
+
+        // --- Chat History & Session Management ---
+
+        function generateUniqueId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+        }
+
+        function loadAllChatSessions() {
+            const storedSessions = localStorage.getItem(CHAT_SESSIONS_KEY);
+            if (storedSessions) {
+                allChatSessions = JSON.parse(storedSessions);
+            } else {
+                allChatSessions = {};
+            }
+            renderSidebarChats();
+        }
+
+        function saveAllChatSessions() {
+            localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(allChatSessions));
+        }
+
+        function renderSidebarChats() {
+            sidebarChatList.innerHTML = '';
+            const sortedSessions = Object.values(allChatSessions).sort((a, b) => b.timestamp - a.timestamp);
+
+            if (sortedSessions.length === 0 && !currentSessionId) {
+                createNewChatSession('New Chat'); // Auto-create if no sessions
+                return;
+            }
+
+            sortedSessions.forEach(session => {
+                const li = document.createElement('li');
+                li.classList.add('sidebar-chat-item');
+                if (session.id === currentSessionId) {
+                    li.classList.add('active');
+                }
+                li.dataset.sessionId = session.id;
+
+                li.innerHTML = `
+                    <div class="sidebar-chat-item-content">
+                        <span data-lucide="message-square" class="w-5 h-5" style="color: inherit;"></span>
+                        <span class="sidebar-chat-item-title" title="${session.title}">${session.title}</span>
+                    </div>
+                    <div class="sidebar-chat-item-actions">
+                        <button class="delete-chat-btn" title="Delete chat">
+                            <span data-lucide="trash-2"></span>
+                        </button>
+                    </div>
+                `;
+                sidebarChatList.appendChild(li);
+            });
+            createIcons(); // Render icons in new sidebar elements
+        }
+
+        function createNewChatSession(initialTitle = 'New Chat') {
+            const newId = generateUniqueId();
+            const newSession = {
+                id: newId,
+                title: initialTitle,
+                history: [],
+                timestamp: Date.now()
+            };
+            allChatSessions[newId] = newSession;
+            currentSessionId = newId;
+            localStorage.setItem(CURRENT_SESSION_ID_KEY, newId);
+            saveAllChatSessions();
+
+            chatHistoryDiv.innerHTML = '';
+            messageTextCache.clear();
+            chatAttachments = [];
+            chatFileUpload.value = '';
+            displayChatAttachments();
+            chatInput.value = '';
+            chatInput.dataset.initialText = '';
+            adjustChatInputHeight();
+            chatInput.focus();
+
+            const initialAIMessageText = 'Hello! I am your AI assistant. How can I assist you today? Feel free to ask questions or attach relevant files for analysis related to Dream11 or any other topic!';
+            allChatSessions[newId].history.push({ role: 'model', parts: [{ text: initialAIMessageText }] }); // Add to history
+            appendChatMessage('ai', initialAIMessageText); // Display
+            
+            updateCurrentSessionHistory(); // Save the new session with initial AI message
+            renderSidebarChats();
+            sidebar.classList.add('hidden-mobile'); // Hide sidebar on mobile after new chat
+            sidebarOverlay.classList.remove('active');
+        }
+
+        function loadChatSession(sessionId) {
+            if (currentSessionId === sessionId) return; // Already on this chat
+            
+            const session = allChatSessions[sessionId];
+            if (!session) {
+                console.error('Session not found:', sessionId);
+                showError('Requested chat session not found.');
+                return;
+            }
+
+            currentSessionId = sessionId;
+            localStorage.setItem(CURRENT_SESSION_ID_KEY, sessionId);
+
+            chatHistoryDiv.innerHTML = '';
+            messageTextCache.clear();
+            chatAttachments = []; // Clear attachments from previous unsent input
+            chatFileUpload.value = '';
+            displayChatAttachments();
+            chatInput.value = '';
+            chatInput.dataset.initialText = '';
+            adjustChatInputHeight();
+            chatInput.focus();
+
+            session.history.forEach(msg => {
+                // Re-parse and display messages
+                if (msg.role === 'user') {
+                    let userText = '';
+                    const displayAttachments = [];
+                    msg.parts.forEach(part => {
+                        if (part.text) {
+                            userText += part.text + ' ';
+                        } else if (part.inlineData) {
+                            displayAttachments.push({
+                                mimeType: part.inlineData.mimeType,
+                                data: part.inlineData.data,
+                                name: `attachment_${displayAttachments.length + 1}`
+                            });
+                        }
+                    });
+                    appendChatMessage('user', userText.trim(), displayAttachments);
+                } else {
+                    appendChatMessage('ai', msg.parts[0].text);
+                }
+            });
+            renderSidebarChats();
+            sidebar.classList.add('hidden-mobile'); // Hide sidebar on mobile after loading chat
+            sidebarOverlay.classList.remove('active');
+            chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+        }
+
+        function updateCurrentSessionHistory(newTitle = null) {
+            if (!currentSessionId || !allChatSessions[currentSessionId]) {
+                console.error("No active session to update. This should not happen.");
+                return;
+            }
+
+            // Ensure history is up-to-date and deep-copied if needed (though direct push/pop keeps it consistent now)
+            allChatSessions[currentSessionId].timestamp = Date.now();
+            if (newTitle) {
+                 allChatSessions[currentSessionId].title = newTitle;
+            } else if (allChatSessions[currentSessionId].title === 'New Chat' && allChatSessions[currentSessionId].history.length > 1) {
+                // Auto-set title from first user message if still default and history exists
+                const firstUserMessage = allChatSessions[currentSessionId].history.find(msg => msg.role === 'user' && msg.parts[0]?.text);
+                if (firstUserMessage) {
+                    allChatSessions[currentSessionId].title = firstUserMessage.parts[0].text.substring(0, 50) + (firstUserMessage.parts[0].text.length > 50 ? '...' : '');
+                }
+            }
+            saveAllChatSessions();
+            renderSidebarChats(); // Re-render sidebar to show updated title/timestamp
+        }
+
+        function deleteChatSession(sessionIdToDelete) {
+            if (confirm('Are you sure you want to delete this chat? This action cannot be undone.')) {
+                delete allChatSessions[sessionIdToDelete];
+                saveAllChatSessions();
+                
+                if (currentSessionId === sessionIdToDelete) {
+                    currentSessionId = null; // Clear current session if deleted
+                    localStorage.removeItem(CURRENT_SESSION_ID_KEY);
+                    createNewChatSession(); // Start a new one
+                } else {
+                    renderSidebarChats(); // Just re-render sidebar
+                }
+                showCopyMessage('Chat deleted successfully!', `var(--accent-error)`); // Use generic show message
+            }
+        }
+
+        // --- Utility Functions ---
+
+        // Function to convert a file to a Base64 string and return its MIME type and data
+        const fileToBase64 = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve({
+                    mimeType: file.type || 'application/octet-stream', // Fallback MIME type
+                    data: reader.result.split(',')[1]
+                });
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        };
+
+        // Function to get Lucide icon name based on MIME type
+        function getFileIcon(mimeType) {
+            if (mimeType.startsWith('image/')) return 'image';
+            if (mimeType === 'application/pdf') return 'file-text';
+            if (mimeType.includes('text/')) return 'file-text';
+            if (mimeType.includes('csv') || mimeType.includes('excel')) return 'file-spreadsheet';
+            if (mimeType.includes('json') || mimeType.includes('xml') || mimeType.includes('code') || mimeType.includes('markdown')) return 'file-code';
+            return 'file';
+        }
+
+        // Function to display an error message
+        function showError(message) {
+            errorText.textContent = message;
+            errorContainer.classList.remove('hidden');
+            setTimeout(() => {
+                errorContainer.classList.add('hidden');
+            }, 5000); // Hide after 5 seconds
+        }
+        
+        // --- Marked.js Custom Renderer for Code Blocks ---
+        const renderer = {
+            code(code, lang) {
+                let actualCodeContent;
+                if (typeof code === 'object' && code !== null && typeof code.text === 'string') {
+                    actualCodeContent = code.text;
+                } else if (typeof code !== 'string') {
+                    actualCodeContent = String(code);
+                } else {
+                    actualCodeContent = code;
+                }
+
+                const languageDisplay = lang ? `<span class="text-xs font-semibold uppercase" style="color: var(--text-secondary);">` + lang + `</span>` : '';
+                const uniqueId = `code-block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                
+                const escapedCode = actualCodeContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+                return `
+                    <div class="code-block-container" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
+                        <div class="code-block-header" style="background-color: var(--header-bg); color: var(--text-secondary); border-bottom-color: var(--border-color);">
+                            ${languageDisplay}
+                            <button class="code-block-copy-button" data-copy-target="${uniqueId}" style="color: var(--text-secondary);">
+                                <span data-lucide="clipboard" class="w-4 h-4"></span>
+                                Copy code
+                            </button>
+                        </div>
+                        <pre style="color: var(--text-primary);"><code id="${uniqueId}">${escapedCode}</code></pre>
+                    </div>
+                `;
+            }
+        };
+
+        marked.use({ renderer });
+
+        /**
+         * Helper function to update a Lucide icon displayed within a button.
+         * Removes the existing SVG and adds a new span for Lucide to convert.
+         * @param {HTMLElement} buttonElement The button element containing the icon.
+         * @param {string} newIconName The Lucide icon name (e.g., 'check', 'clipboard').
+         * @param {string} [classList] Optional additional classes for the new span. Defaults to 'w-4 h-4' for action buttons.
+         */
+        function updateButtonIcon(buttonElement, newIconName, classList = 'w-4 h-4') {
+            let currentIconSvg = buttonElement.querySelector('.lucide');
+            if (currentIconSvg) {
+                currentIconSvg.remove();
+            }
+
+            const newIconSpan = document.createElement('span');
+            newIconSpan.setAttribute('data-lucide', newIconName);
+            newIconSpan.className = classList;
+
+            buttonElement.appendChild(newIconSpan);
+           
+            createIcons();
+        }
+
+        // Function to append a message to the chat history
+        function appendChatMessage(role, text, attachments = []) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chat-message', role);
+            
+            const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            messageDiv.dataset.messageId = messageId;
+            
+            let contentHTML = '';
+            let rawMessageContentForCache = '';
+
+            if (role === 'user') {
+                rawMessageContentForCache = `You: ${text}`;
+                contentHTML += `<span class="font-bold">You:</span> ${text}`;
+                if (attachments.length > 0) {
+                    contentHTML += `<div class="mt-2 flex flex-wrap gap-2">`;
+                    attachments.forEach(attachment => {
+                        if (attachment.mimeType.startsWith('image/')) {
+                            contentHTML += `<img src="data:${attachment.mimeType};base64,${attachment.data}" alt="${attachment.name || 'User attachment'}" class="chat-image w-24 h-24 object-cover">`;
+                        } else {
+                            contentHTML += `
+                                <div class="flex items-center space-x-1 p-2 rounded-md text-sm" style="background-color: var(--bg-secondary); color: var(--text-primary);">
+                                    <span data-lucide="${getFileIcon(attachment.mimeType)}" class="w-4 h-4 flex-shrink-0" style="color: var(--accent-secondary);"></span>
+                                    <span class="truncate max-w-[120px]">${attachment.name || 'File'}</span>
+                                </div>
+                            `;
+                        }
+                    });
+                    contentHTML += `</div>`;
+                    rawMessageContentForCache += `\n[Attachments: ${attachments.map(a => a.name).join(', ')}]`;
+                }
+            } else { // AI message
+                rawMessageContentForCache = `AI: ${text}`;
+                contentHTML = `<div class="message-content">${marked.parse(text)}</div>`;
+            }
+            
+            messageTextCache.set(messageId, rawMessageContentForCache); 
+
+            const actionsHTML = `
+                <div class="message-actions">
+                    <button class="copy-message-btn" title="Copy message" data-message-id="${messageId}">
+                        <span data-lucide="clipboard" class="w-4 h-4"></span>
+                    </button>
+                    <button class="dictate-message-btn" title="Dictate message" data-message-id="${messageId}">
+                        <span data-lucide="volume-2" class="w-4 h-4"></span>
+                    </button>
+                </div>
+            `;
+            
+            messageDiv.innerHTML = contentHTML + actionsHTML;
+            chatHistoryDiv.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.style.transform = 'scale(1)';
+            }, 10);
+            
+            chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+            
+            createIcons();
+        }
+        
+        // Event listener for chat file upload
+        chatFileUpload.addEventListener('change', async (event) => {
+            const files = Array.from(event.target.files);
+            if (files.length > 0) {
+                await processFiles(files);
+                chatInput.focus();
+            }
+        });
+
+        // Helper function to process files from various sources (drag/drop, paste, file input)
+        async function processFiles(files) {
+            for (const file of files) {
+                const allowedTypes = [
+                    'image/', 'text/', 'application/pdf',
+                    'application/json', 'text/csv', 'application/xml', 'text/markdown'
+                ];
+                const isAllowed = allowedTypes.some(type => file.type.startsWith(type)) || file.name.endsWith('.md');
+
+                if (isAllowed) {
+                    try {
+                        const { mimeType, data } = await fileToBase64(file);
+                        chatAttachments.push({ file, mimeType, data, name: file.name });
+                    } catch (error) {
+                        showError(`Failed to read chat file ${file.name}.`);
+                        console.error('Chat file read error:', error);
+                    }
+                } else {
+                    showError(`File type not supported for chat: ${file.name} (${file.type}).`);
+                }
+            }
+            displayChatAttachments();
+            adjustChatInputHeight();
+        }
+
+        // Function to display chat attachments
+        function displayChatAttachments() {
+            chatAttachmentsPreviewContainer.innerHTML = '';
+            if (chatAttachments.length > 0) {
+                chatAttachmentsPreviewContainer.classList.remove('hidden');
+                chatAttachments.forEach((attachment, index) => {
+                    const attachmentDiv = document.createElement('div');
+                    attachmentDiv.classList.add('chat-attachment-preview-item');
+                    attachmentDiv.dataset.index = index;
+
+                    let previewContent = '';
+                    if (attachment.mimeType.startsWith('image/')) {
+                        previewContent = `<img src="data:${attachment.mimeType};base64,${attachment.data}" alt="${attachment.name}" class="w-8 h-8 object-cover rounded-md">`;
+                    } else {
+                        previewContent = `<span data-lucide="${getFileIcon(attachment.mimeType)}" class="w-5 h-5 flex-shrink-0"></span>`;
+                    }
+
+                    attachmentDiv.innerHTML = `
+                        ${previewContent}
+                        <span class="truncate max-w-[100px]">${attachment.name}</span>
+                        <button class="remove-attachment-btn">
+                            <span data-lucide="x" class="w-4 h-4"></span>
+                        </button>
+                    `;
+                    chatAttachmentsPreviewContainer.appendChild(attachmentDiv);
+                });
+                createIcons();
+            } else {
+                chatAttachmentsPreviewContainer.classList.add('hidden');
+            }
+        }
+
+        // Event listener for removing individual chat attachments (using event delegation)
+        chatAttachmentsPreviewContainer.addEventListener('click', (event) => {
+            const removeBtn = event.target.closest('.remove-attachment-btn');
+            if (removeBtn) {
+                const attachmentDiv = removeBtn.closest('[data-index]');
+                if (attachmentDiv) {
+                    const index = parseInt(attachmentDiv.dataset.index);
+                    chatAttachments.splice(index, 1);
+                    displayChatAttachments();
+                    chatInput.focus();
+                }
+            }
+        });
+
+        // Adjust chat input textarea height dynamically
+        function adjustChatInputHeight() {
+            chatInput.style.height = 'auto';
+            chatInput.style.height = chatInput.scrollHeight + 'px';
+        }
+        chatInput.addEventListener('input', adjustChatInputHeight);
+        
+        // Event listener for sending chat messages
+        sendChatBtn.addEventListener('click', async () => {
+            const userMessage = chatInput.value.trim();
+            if (!userMessage && chatAttachments.length === 0) {
+                return;
+            }
+            
+            // Stop speech recognition if active before sending
+            if (isVoiceInputActive && recognition) {
+                recognition.stop();
+            }
+
+            const userParts = [];
+            if (userMessage) {
+                userParts.push({ text: userMessage });
+            }
+            for (const attachment of chatAttachments) {
+                userParts.push({
+                    inlineData: {
+                        mimeType: attachment.mimeType,
+                        data: attachment.data
+                    }
+                });
+            }
+
+            // Use the actual session history directly
+            const currentSessionHistory = allChatSessions[currentSessionId].history;
+
+            currentSessionHistory.push({ role: 'user', parts: userParts });
+            appendChatMessage('user', userMessage, chatAttachments);
+            
+            // Clear input and attachment after sending
+            chatInput.value = '';
+            chatInput.dataset.initialText = ''; // Clear initial text for voice input
+            adjustChatInputHeight();
+            chatAttachments = [];
+            chatFileUpload.value = '';
+            displayChatAttachments();
+            
+            sendChatBtn.disabled = true;
+            
+            const loadingMessage = document.createElement('div');
+            loadingMessage.id = 'chat-loading';
+            loadingMessage.classList.add('p-4', 'text-center', 'text-sm');
+            loadingMessage.style.color = 'var(--text-secondary)'; /* Themed */
+            loadingMessage.innerHTML = `
+                <div class="loader-container h-8">
+                    <div class="loader-dot"></div>
+                    <div class="loader-dot"></div>
+                    <div class="loader-dot"></div>
+                </div>
+                <span class="mt-2 block">AI is typing...</span>
+            `;
+            chatHistoryDiv.appendChild(loadingMessage);
+            chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+            
+            try {
+                const payload = {
+                    contents: currentSessionHistory, // Send the updated history including the latest user message
+                };
+                
+                const responseText = await callGeminiAPI(payload, selectedPersonality); // Pass personality
+                
+                // Add AI response to the history after successful API call
+                currentSessionHistory.push({ role: 'model', parts: [{ text: responseText }] });
+                appendChatMessage('ai', responseText);
+                
+                updateCurrentSessionHistory(); // Persist the updated chat history
+                
+            } catch (error) {
+                console.error('Chat API call failed:', error);
+                showError(`An error occurred in the chat: ${error.message}`);
+                // If API call fails, remove the last user message from history for re-try
+                currentSessionHistory.pop(); 
+                updateCurrentSessionHistory(); // Persist the state after pop
+            } finally {
+                sendChatBtn.disabled = false;
+                const loadingDiv = document.getElementById('chat-loading');
+                if (loadingDiv) {
+                    loadingDiv.remove();
+                }
+                chatInput.focus();
+            }
+        });
+        
+        // Add event listener for the 'Enter' key on the chat input
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatBtn.click();
+            }
+        });
+
+        // Event listener for voice input button (general chat)
+        voiceInputBtn.addEventListener('click', () => {
+            if (recognition) {
+                if (isVoiceInputActive) {
+                    recognition.stop();
+                } else {
+                    finalTranscript = ''; // Reset transcript for a new session
+                    recognition.start();
+                }
+            } else {
+                showError('Speech recognition is not supported in this browser.');
+            }
+        });
+
+        // Drag and Drop for Chat Input Area
+        chatInputAreaContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            chatInputAreaContainer.classList.add('drag-over-active');
+        });
+
+        chatInputAreaContainer.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            chatInputAreaContainer.classList.remove('drag-over-active');
+        });
+
+        chatInputAreaContainer.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            chatInputAreaContainer.classList.remove('drag-over-active');
+
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) {
+                await processFiles(files);
+                chatInput.focus();
+            }
+        });
+
+        // Paste files onto the text input box
+        chatInput.addEventListener('paste', async (event) => {
+            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+            let filesToProcess = [];
+            let textToPaste = '';
+
+            for (const item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const file = item.getAsFile();
+                    if (file) {
+                        filesToProcess.push(file);
+                    }
+                } else if (item.kind === 'string' && item.type === 'text/plain') {
+                    // Get text content, but don't prevent default yet
+                    item.getAsString(s => textToPaste = s);
+                }
+            }
+
+            if (filesToProcess.length > 0) {
+                event.preventDefault(); // Prevent default text paste if files are being handled
+                await processFiles(filesToProcess);
+                // If there was also text content in the paste, append it after processing files
+                if (textToPaste) {
+                    chatInput.value += textToPaste;
+                }
+                adjustChatInputHeight();
+            }
+            // If only text was pasted, the default paste behavior already handled it.
+        });
+
+
+        // Event listener for the New Chat button in sidebar
+        newChatButton.addEventListener('click', () => {
+            if (isSpeaking) {
+                window.speechSynthesis.cancel();
+                isSpeaking = false;
+                currentUtterance = null;
+            }
+            if (isVoiceInputActive && recognition) {
+                recognition.stop();
+            }
+            // NEW: Stop conversation mode if active
+            if (isConversationModeActive) {
+                stopConversationMode();
+            }
+            createNewChatSession();
+        });
+        
+        // Function to show a temporary message for clipboard copy
+        function showCopyMessage(message = 'Text copied to clipboard!', bgColor = 'var(--accent-success)') {
+            copyMessage.textContent = message;
+            copyMessage.style.backgroundColor = bgColor;
+            copyMessage.classList.add('show');
+            setTimeout(() => {
+                copyMessage.classList.remove('show');
+            }, 3000);
+        }
+
+        // Event delegation for copy code buttons within chat history
+        chatHistoryDiv.addEventListener('click', (event) => {
+            const codeCopyButton = event.target.closest('.code-block-copy-button');
+            if (codeCopyButton) {
+                const targetId = codeCopyButton.dataset.copyTarget;
+                const codeElement = document.getElementById(targetId);
+                if (codeElement) {
+                    const codeToCopy = codeElement.textContent;
+                    updateButtonIcon(codeCopyButton, 'check', 'w-4 h-4');
+                    copyToClipboard(codeToCopy); 
+                    setTimeout(() => {
+                        updateButtonIcon(codeCopyButton, 'clipboard', 'w-4 h-4');
+                    }, 2000);
+                    return;
+                }
+            }
+
+            const chatCopyButton = event.target.closest('.copy-message-btn');
+            if (chatCopyButton) {
+                const messageId = chatCopyButton.dataset.messageId;
+                const messageContent = messageTextCache.get(messageId);
+                if (messageContent) {
+                    updateButtonIcon(chatCopyButton, 'check');
+                    copyToClipboard(messageContent); 
+                    setTimeout(() => {
+                        updateButtonIcon(chatCopyButton, 'clipboard');
+                    }, 2000);
+                } else {
+                    showError('Message content not found for copying.');
+                }
+                return;
+            }
+
+            const dictateButton = event.target.closest('.dictate-message-btn');
+            if (dictateButton) {
+                const messageId = dictateButton.dataset.messageId;
+                const messageContent = messageTextCache.get(messageId);
+                if (messageContent) {
+                    toggleSpeech(messageContent, dictateButton);
+                } else {
+                    showError('Message content not found for dictation.');
+                }
+                return;
+            }
+        });
+
+        // Event delegation for sidebar chat items
+        sidebarChatList.addEventListener('click', (event) => {
+            const chatItem = event.target.closest('.sidebar-chat-item');
+            if (chatItem) {
+                const sessionId = chatItem.dataset.sessionId;
+                const deleteBtn = event.target.closest('.delete-chat-btn');
+
+                if (deleteBtn) {
+                    event.stopPropagation(); // Prevent loading chat when deleting
+                    deleteChatSession(sessionId);
+                } else {
+                    loadChatSession(sessionId);
+                }
+            }
+        });
+
+        // Hamburger menu for mobile sidebar
+        hamburgerMenuButton.addEventListener('click', () => {
+            sidebar.classList.remove('hidden-mobile');
+            sidebarOverlay.classList.add('active');
+        });
+
+        closeSidebarBtn.addEventListener('click', () => {
+            sidebar.classList.add('hidden-mobile');
+            sidebarOverlay.classList.remove('active');
+        });
+
+        sidebarOverlay.addEventListener('click', () => {
+            sidebar.classList.add('hidden-mobile');
+            sidebarOverlay.classList.remove('active');
+        });
+
+
+        // Helper function to copy text to clipboard
+        function copyToClipboard(text) { 
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text)
+                    .then(() => {
+                        showCopyMessage();
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy: ', err);
+                        showError('Failed to copy text. Please copy manually.');
+                    });
+            } else {
+                const tempTextArea = document.createElement('textarea');
+                tempTextArea.value = text;
+                document.body.appendChild(tempTextArea);
+                tempTextArea.select();
+                try {
+                    document.execCommand('copy');
+                    showCopyMessage();
+                } catch (err) {
+                    console.error('Failed to copy (fallback):', err);
+                    showError('Failed to copy text. Please copy manually.');
+                }
+                document.body.removeChild(tempTextArea);
+            }
+        }
+
+        // Helper function for text-to-speech (general chat dictation)
+        function toggleSpeech(text, buttonElement) {
+            if (!window.speechSynthesis) {
+                showError('Speech synthesis not supported in this browser.');
+                return;
+            }
+
+            if (isSpeaking && currentUtterance && currentUtterance.text === text) {
+                if (window.speechSynthesis.paused) {
+                    window.speechSynthesis.resume();
+                    updateButtonIcon(buttonElement, 'pause');
+                } else {
+                    window.speechSynthesis.pause();
+                    updateButtonIcon(buttonElement, 'volume-2');
+                }
+            } else {
+                startSpeech(text, buttonElement);
+            }
+        }
+
+        function startSpeech(text, buttonElement) {
+            if (window.speechSynthesis.speaking || window.speechSynthesis.paused) {
+                window.speechSynthesis.cancel();
+            }
+
+            document.querySelectorAll('.dictate-message-btn').forEach(btn => {
+                if (btn !== buttonElement) {
+                    updateButtonIcon(btn, 'volume-2'); 
+                }
+            });
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+
+            utterance.onstart = () => {
+                isSpeaking = true;
+                currentUtterance = utterance;
+                updateButtonIcon(buttonElement, 'pause');
+            };
+            utterance.onend = () => {
+                isSpeaking = false;
+                currentUtterance = null;
+                updateButtonIcon(buttonElement, 'volume-2');
+            };
+            utterance.onerror = (event) => {
+                console.error('Speech synthesis error:', event.error);
+                showError('Failed to dictate message. Check console for details.');
+                isSpeaking = false;
+                currentUtterance = null;
+                updateButtonIcon(buttonElement, 'volume-2');
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Generic API call function with exponential backoff
+        async function callGeminiAPI(payload, personalityName = "Standard") {
+            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            // IMPORTANT: Replace "YOUR_GEMINI_API_KEY" with your actual Google Gemini API Key.
+            // Get your API key from Google AI Studio: https://makersuite.google.com/
+            // Do NOT expose your API key directly in production applications.
+            // For production, consider using a backend proxy to secure your API key.
+            // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            const apiKey = "AIzaSyCzx6ReMk8ohPJcCjGwHHzu7SvFccJqAbA"; 
+
+            if (apiKey === "YOUR_GEMINI_API_KEY" || !apiKey || apiKey === "") { 
+                throw new Error("API Key is not set or is the default placeholder. Please replace 'YOUR_GEMINI_API_KEY' in the script with your actual Gemini API key.");
+            }
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            let response;
+            let result;
+            let success = false;
+            let retryCount = 0;
+            const maxRetries = 3;
+            let delay = 1000;
+
+            // NEW: Apply personality prompt
+            const selectedPersonalityObj = personalities.find(p => p.name === personalityName);
+            if (selectedPersonalityObj && selectedPersonalityObj.prompt) {
+                // Prepend a system message for personality
+                // Note: The prompt is added to the *first* content part of the *first* message in the turn.
+                // If `payload.contents` is empty or the first part is not text, this might need adjustment.
+                if (payload.contents && payload.contents.length > 0 && payload.contents[0].parts && payload.contents[0].parts.length > 0 && payload.contents[0].parts[0].text) {
+                    payload.contents[0].parts[0].text = selectedPersonalityObj.prompt + "\n" + payload.contents[0].parts[0].text;
+                } else {
+                    // Fallback for empty or non-text first message, though typically the first message is a user's text.
+                    payload.contents = [{ role: "user", parts: [{ text: selectedPersonalityObj.prompt }] }].concat(payload.contents);
+                }
+            }
+
+
+            while (retryCount < maxRetries && !success) {
+                try {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.status === 429) {
+                        if (retryCount < maxRetries - 1) {
+                            console.warn(`API rate limit exceeded. Retrying in ${delay / 1000}s...`);
+                            await new Promise(res => setTimeout(res, delay));
+                            delay *= 2;
+                            retryCount++;
+                        } else {
+                            throw new Error('API rate limit exceeded. Please try again later.');
+                        }
+                    } else if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`API error: ${response.status} ${response.statusText} - ${errorData.error?.message || 'Unknown error'}`);
+                    } else {
+                        result = await response.json();
+                        success = true;
+                    }
+                } catch (err) {
+                    if (retryCount < maxRetries - 1) {
+                        console.warn(`Fetch error: ${err.message}. Retrying in ${delay / 1000}s...`);
+                        await new Promise(res => setTimeout(res, delay));
+                        delay *= 2;
+                        retryCount++;
+                    } else {
+                        throw err;
+                    }
+                }
+            }
+            
+            if (result && result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                return result.candidates[0].content.parts[0].text;
+            } else {
+                throw new Error('Failed to get a valid response from the AI. No candidates found or content is empty.');
+            }
+        }
+
+
+        // --- NEW: Conversation Mode Functions ---
+
+        function updateVoiceDropdown() {
+            availableVoices = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('en')); // Filter for English voices
+            voiceSelect.innerHTML = '<option value="">Default Voice</option>';
+            availableVoices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.name;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                voiceSelect.appendChild(option);
+            });
+            // Try to set previously selected voice
+            const storedVoiceName = localStorage.getItem(CONVERSATION_VOICE_KEY);
+            if (storedVoiceName) {
+                voiceSelect.value = storedVoiceName;
+                selectedVoice = availableVoices.find(v => v.name === storedVoiceName) || null;
+            }
+        }
+
+        function updatePersonalityDropdown() {
+            personalitySelect.innerHTML = '';
+            personalities.forEach(p => {
+                const option = document.createElement('option');
+                option.value = p.name;
+                option.textContent = p.name;
+                personalitySelect.appendChild(option);
+            });
+            // Try to set previously selected personality
+            const storedPersonalityName = localStorage.getItem(CONVERSATION_PERSONALITY_KEY);
+            if (storedPersonalityName && personalities.some(p => p.name === storedPersonalityName)) {
+                personalitySelect.value = storedPersonalityName;
+                selectedPersonality = storedPersonalityName;
+            } else {
+                personalitySelect.value = "Standard";
+                selectedPersonality = "Standard";
+            }
+        }
+
+        voiceSelect.addEventListener('change', () => {
+            const voiceName = voiceSelect.value;
+            selectedVoice = availableVoices.find(v => v.name === voiceName) || null;
+            localStorage.setItem(CONVERSATION_VOICE_KEY, voiceName);
+        });
+
+        personalitySelect.addEventListener('change', () => {
+            selectedPersonality = personalitySelect.value;
+            localStorage.setItem(CONVERSATION_PERSONALITY_KEY, selectedPersonality);
+            // Optionally, the AI could acknowledge personality change, but for now, it's silent.
+        });
+
+
+        function startConversationMode() {
+            if (!SpeechRecognition || !window.speechSynthesis) {
+                showError("Your browser doesn't fully support Web Speech APIs needed for Conversation Mode.");
+                return;
+            }
+            isConversationModeActive = true;
+            conversationModeOverlay.classList.remove('hidden'); // Use hidden class for visibility
+            conversationModeOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden'; // Prevent scrolling background
+            
+            // Stop any ongoing general chat speech or recognition
+            if (isSpeaking) {
+                window.speechSynthesis.cancel();
+                isSpeaking = false;
+            }
+            if (isVoiceInputActive && recognition) {
+                recognition.stop();
+            }
+
+            // Start listening for the user
+            startConversationListening();
+        }
+
+        function stopConversationMode() {
+            isConversationModeActive = false;
+            conversationModeOverlay.classList.remove('active');
+            // Give it a moment for animation before adding 'hidden'
+            setTimeout(() => {
+                conversationModeOverlay.classList.add('hidden');
+                document.body.style.overflow = ''; // Restore scrolling
+            }, 300); 
+
+            // Stop any ongoing conversation speech or recognition
+            if (isAiSpeakingInConversation) {
+                window.speechSynthesis.cancel();
+                isAiSpeakingInConversation = false;
+            }
+            if (isUserListeningInConversation && conversationSpeechRecognition) {
+                conversationSpeechRecognition.stop();
+                isUserListeningInConversation = false;
+            }
+            setSoundBlobState('idle');
+            conversationStatusText.textContent = 'Tap the button to start conversing!';
+            clearConversationDisplay();
+        }
+
+        function startConversationListening() {
+            if (!isConversationModeActive || isAiSpeakingInConversation || isUserListeningInConversation) return;
+
+            // Clear any lingering speech
+            window.speechSynthesis.cancel();
+
+            // Clear previous transcripts
+            conversationFinalTranscript = '';
+            conversationInterimTranscript = '';
+            clearConversationDisplay();
+
+            // Start recognition
+            try {
+                conversationSpeechRecognition.start();
+                updateConversationStatus('Listening...', 'listening');
+                setSoundBlobState('listening');
+            } catch (error) {
+                if (error.name === 'InvalidStateError') {
+                    // Already started, or some other state issue, try stopping then starting
+                    conversationSpeechRecognition.stop();
+                    setTimeout(() => { // Give it a moment to stop cleanly
+                        conversationSpeechRecognition.start();
+                        updateConversationStatus('Listening...', 'listening');
+                        setSoundBlobState('listening');
+                    }, 100);
+                } else {
+                    console.error("Error starting conversation recognition:", error);
+                    showError("Could not start microphone. Please check permissions.");
+                    updateConversationStatus("Error starting microphone.", 'error');
+                    setSoundBlobState('idle');
+                }
+            }
+        }
+
+        // Handles user finishing speaking
+        async function handleUserSpeechEnd(userText) {
+            updateConversationStatus('Thinking...', 'thinking');
+            setSoundBlobState('idle'); // Stop listening animation
+
+            // Add user message to regular chat history
+            const currentSessionHistory = allChatSessions[currentSessionId].history;
+            currentSessionHistory.push({ role: 'user', parts: [{ text: userText }] });
+            appendChatMessage('user', userText); // Display in background chat
+            updateCurrentSessionHistory();
+
+            // Update conversation display
+            updateConversationDisplay(`<span class="user-utterance">You: ${userText}</span>`);
+
+            try {
+                const payload = {
+                    contents: currentSessionHistory,
+                };
+                const aiResponse = await callGeminiAPI(payload, selectedPersonality);
+
+                // Add AI response to regular chat history
+                currentSessionHistory.push({ role: 'model', parts: [{ text: aiResponse }] });
+                appendChatMessage('ai', aiResponse); // Display in background chat
+                updateCurrentSessionHistory();
+
+                startConversationSpeaking(aiResponse);
+
+            } catch (error) {
+                console.error("Error in conversation mode API call:", error);
+                showError(`AI communication error: ${error.message}`);
+                updateConversationStatus("AI communication error. Please try again.", 'error');
+                // Remove the user's last message from history if AI failed to respond
+                currentSessionHistory.pop();
+                updateCurrentSessionHistory();
+                setSoundBlobState('idle');
+                // Attempt to restart listening after a short delay for error
+                setTimeout(startConversationListening, 2000);
+            }
+        }
+
+        // Handles AI speaking
+        function startConversationSpeaking(text) {
+            if (!isConversationModeActive) return;
+
+            // Ensure recognition is stopped
+            if (isUserListeningInConversation && conversationSpeechRecognition) {
+                conversationSpeechRecognition.stop(); // This will trigger onend
+            }
+            
+            // Clear conversation display to show AI thinking/speaking state
+            clearConversationDisplay(); 
+
+            updateConversationStatus('AI Speaking...', 'speaking');
+            setSoundBlobState('speaking');
+            updateConversationDisplay(`<span class="ai-utterance">AI: ${text}</span>`); // Display AI response immediately
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+            }
+            utterance.lang = 'en-US'; // Ensure consistent language
+
+            utterance.onstart = () => {
+                isAiSpeakingInConversation = true;
+                // console.log("AI Started Speaking");
+            };
+
+            utterance.onend = () => {
+                isAiSpeakingInConversation = false;
+                // console.log("AI Finished Speaking");
+                // After AI finishes, restart listening for user
+                handleAiSpeechEnd();
+            };
+
+            utterance.onerror = (event) => {
+                console.error('Conversation mode Speech synthesis error:', event.error);
+                showError('AI could not speak this message.');
+                updateConversationStatus('AI speech error.', 'error');
+                isAiSpeakingInConversation = false;
+                handleAiSpeechEnd(); // Still try to resume conversation
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Handles AI finishing speaking (or error during speaking)
+        function handleAiSpeechEnd() {
+            if (!isConversationModeActive) return;
+
+            isAiSpeakingInConversation = false;
+            updateConversationStatus('Listening...', 'listening');
+            setSoundBlobState('listening');
+            startConversationListening(); // Restart listening for user input
+        }
+
+        // Update conversation display (for current turn)
+        function updateConversationDisplay(text) {
+            // Clear previous timeout if it exists
+            if (conversationDisplayTimeout) {
+                clearTimeout(conversationDisplayTimeout);
+            }
+            conversationHistoryDisplay.innerHTML = `<p>${text}</p>`;
+            conversationHistoryDisplay.scrollTop = conversationHistoryDisplay.scrollHeight;
+            
+            // Set a timeout to clear the display after a short while, to make it feel more ephemeral
+            conversationDisplayTimeout = setTimeout(() => {
+                clearConversationDisplay();
+            }, 5000); // Clear after 5 seconds
+        }
+
+        function clearConversationDisplay() {
+            if (conversationDisplayTimeout) {
+                clearTimeout(conversationDisplayTimeout);
+                conversationDisplayTimeout = null;
+            }
+            conversationHistoryDisplay.innerHTML = '';
+        }
+
+
+        function updateConversationStatus(message, state = 'idle') {
+            conversationStatusText.textContent = message;
+            conversationStatusText.classList.remove('listening-state', 'speaking-state', 'error-state');
+            if (state === 'listening') {
+                conversationStatusText.classList.add('listening-state');
+            } else if (state === 'speaking') {
+                conversationStatusText.classList.add('speaking-state');
+            } else if (state === 'error') {
+                conversationStatusText.classList.add('error-state');
+            }
+        }
+
+        function setSoundBlobState(state) {
+            soundBlob.classList.remove('listening-animation', 'speaking-animation', 'idle-animation');
+            // Ensure pseudo-elements are also reset or controlled by the main class
+            // No direct control needed for pseudo-elements if they inherit animation.
+            switch (state) {
+                case 'listening':
+                    soundBlob.classList.add('listening-animation');
+                    break;
+                case 'speaking':
+                    soundBlob.classList.add('speaking-animation');
+                    break;
+                case 'idle':
+                default:
+                    soundBlob.classList.add('idle-animation');
+                    break;
+            }
+        }
+
+        // Event listener for conversation mode toggle button
+        conversationModeToggleBtn.addEventListener('click', startConversationMode);
+
+        // Event listener for conversation mode close button
+        conversationModeCloseBtn.addEventListener('click', stopConversationMode);
+
+        // Event listener for conversation mic button
+        conversationMicBtn.addEventListener('click', () => {
+            if (isAiSpeakingInConversation) {
+                // If AI is speaking, interrupt it
+                window.speechSynthesis.cancel();
+                // TTS onend will handle restarting listening
+            } else if (isUserListeningInConversation) {
+                // If user is speaking, stop listening
+                conversationSpeechRecognition.stop();
+            } else {
+                // If idle, start listening
+                startConversationListening();
+            }
+        });
+
+        // Event for when voices are loaded/changed
+        window.speechSynthesis.onvoiceschanged = updateVoiceDropdown;
+
+        // --- Initial Load ---
+        window.addEventListener('load', () => {
+            createIcons();
+            loadAllChatSessions();
+
+            let storedSessionId = localStorage.getItem(CURRENT_SESSION_ID_KEY);
+            if (storedSessionId && allChatSessions[storedSessionId]) {
+                loadChatSession(storedSessionId);
+            } else if (Object.keys(allChatSessions).length > 0) {
+                // If no specific session, load the most recent one
+                const mostRecentSessionId = Object.values(allChatSessions).sort((a,b) => b.timestamp - a.timestamp)[0].id;
+                loadChatSession(mostRecentSessionId);
+            } else {
+                createNewChatSession('New Chat');
+            }
+
+            // Set the correct selected option for the version selector on load
+            const currentUrl = window.location.href;
+            let foundVersionOption = false;
+            Array.from(versionSelectSidebar.options).forEach(option => {
+                // Check if option value is a substring of current URL to match netlify subdomains
+                if (currentUrl.includes(option.value) && option.value.includes('small-ai-big-vision-v2.netlify.app')) {
+                    option.selected = true;
+                    foundVersionOption = true;
+                }
+            });
+            if (!foundVersionOption && versionSelectSidebar.options.length > 0) {
+                // If current version not found or no stored URL, fallback to the explicitly selected option
+                // which is "Small AI v2 (Current)" in the HTML.
+                // Or if that fails, default to the first available option.
+                const preselectedOption = Array.from(versionSelectSidebar.options).find(option => option.selected);
+                if (!preselectedOption) {
+                    versionSelectSidebar.options[0].selected = true; 
+                }
+            }
+
+            // Set the correct selected option for the APP theme selector on load
+            if (appThemeSelect && localStorage.getItem(THEME_STORAGE_KEY)) {
+                appThemeSelect.value = localStorage.getItem(THEME_STORAGE_KEY);
+            } else if (appThemeSelect && appThemeSelect.options.length > 0) {
+                appThemeSelect.value = DEFAULT_THEME_NAME; // Default to 'default' if nothing stored
+            }
+
+            // NEW: Initialize conversation mode dropdowns
+            updateVoiceDropdown();
+            updatePersonalityDropdown();
+            setSoundBlobState('idle'); // Initial state for sound blob
+
+            adjustChatInputHeight(); // Adjust initial input height
+        });
+    </script>
+</body>
+</html>
